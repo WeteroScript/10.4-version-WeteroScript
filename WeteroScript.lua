@@ -1,12 +1,13 @@
 --[[
-    WeteroScript v11.02 FIXED v2
+    WeteroScript v11.02 FIXED v3
     Author: @WeteroScript
     Исправления:
-    1. STOP SCRIPT больше не оставляет квадраты на других игроках
-    2. Mimic Menu Random Target работает мгновенно после перезапуска
-    3. Круглая черная кнопка Fly с радужной обводкой
-    4. Таймер Refresh Time, радужная обводка Mimic Menu, Follow Offset/Delay с кнопками вкл/выкл, Open Player List
-    5. Круглая черная кнопка Bot с радужной обводкой, линии WP следуют за персонажем
+    1. Random Target телепортирует к цели
+    2. Follow Offset/Delay применяются только по кнопке ON/OFF
+    3. Mimic Menu скрывается при выключении Start Mimic
+    4. Open Player List не пересекается с другими кнопками
+    5. Линии WP идут от персонажа к WP#1, затем от WP#1 к WP#2 и т.д.
+    6. Активная точка и линия светятся зеленым при старте бота
 ]]
 
 -- ==================== SERVICES ====================
@@ -17,6 +18,7 @@ local Players = game:GetService("Players")
 local Player = Players.LocalPlayer
 local TeleportService = game:GetService("TeleportService")
 local Workspace = game:GetService("Workspace")
+local TweenService = game:GetService("TweenService")
 
 -- ==================== CLEANUP ====================
 pcall(function()
@@ -83,7 +85,6 @@ local function addRainbowStroke(parent, thickness)
     return s
 end
 
--- Rainbow update loop
 RunService.RenderStepped:Connect(function(dt)
     local hue = (tick() * 0.5) % 1
     for i, s in pairs(rainbowStrokes) do
@@ -565,8 +566,9 @@ local Features = {
     Freezecam = false,
     SpinSpeed = 50,
     AnimSpeed = 1,
-    Mimic = {Enabled = false, Target = nil, PositionDelay = 0.1, CopyJump = true, SmoothFollow = true, FollowOffset = 5},
-    Bot = {Enabled = false, Speed = 16, JumpPower = 50, JumpOnPoint = false, Waypoints = {}}
+    Mimic = {Enabled = false, Target = nil, PositionDelay = 0.1, CopyJump = true, SmoothFollow = true, FollowOffset = 5,
+        FollowOffsetEnabled = false, FollowDelayEnabled = false},
+    Bot = {Enabled = false, Speed = 16, JumpPower = 50, JumpOnPoint = false, Waypoints = {}, CurrentWaypointIndex = 0}
 }
 
 local connections = {}
@@ -574,7 +576,7 @@ local espStorage = {}
 local mimicConnections = {}
 local botConnections = {}
 local botWaypointBeams = {}
-local lastWaypointPart = nil
+local botWaypointParts = {}
 
 -- ==================== CLEANUP FUNCTIONS ====================
 local function resetAllHitboxes()
@@ -605,10 +607,35 @@ local function stopMimic()
             hum.JumpPower = Features.Jump.Enabled and Features.Jump.Value or 50
         end
     end
+    -- Hide Mimic Menu
+    if MimicMenuWindow then
+        MimicMenuWindow.Visible = false
+    end
+    if MimicMenuBtn then
+        MimicMenuBtn.Visible = false
+    end
+end
+
+local function resetWaypointColors()
+    for _, wp in pairs(Features.Bot.Waypoints) do
+        if wp.Part and wp.Part.Parent then
+            wp.Part.Color = Color3.fromRGB(60, 100, 255)
+            if wp.Beam and wp.Beam.Parent then
+                wp.Beam.Color = ColorSequence.new(Color3.fromRGB(60, 100, 255))
+            end
+            -- Reset light
+            for _, child in pairs(wp.Part:GetChildren()) do
+                if child:IsA("PointLight") then
+                    child.Color = Color3.fromRGB(60, 100, 255)
+                end
+            end
+        end
+    end
 end
 
 local function stopBot()
     Features.Bot.Enabled = false
+    Features.Bot.CurrentWaypointIndex = 0
     if botConnections.Walk then
         botConnections.Walk:Disconnect()
         botConnections.Walk = nil
@@ -620,19 +647,24 @@ local function stopBot()
             hum.JumpPower = Features.Jump.Enabled and Features.Jump.Value or 50
         end
     end
+    resetWaypointColors()
 end
 
 local function clearWaypointBeams()
-    for _, beam in pairs(botWaypointBeams) do
-        if beam and beam.Parent then
-            beam:Destroy()
+    for _, wp in pairs(Features.Bot.Waypoints) do
+        if wp.Beam and wp.Beam.Parent then
+            wp.Beam:Destroy()
+        end
+        if wp.Part and wp.Part.Parent then
+            wp.Part:Destroy()
         end
     end
+    Features.Bot.Waypoints = {}
     botWaypointBeams = {}
+    botWaypointParts = {}
 end
 
 local function stopAllFunctions()
-    -- Disconnect all connections
     for _, conn in pairs(connections) do
         if typeof(conn) == "RBXScriptConnection" then
             pcall(function() conn:Disconnect() end)
@@ -648,7 +680,7 @@ local function stopAllFunctions()
 
     stopMimic()
     stopBot()
-    clearWaypointBeams()
+    resetWaypointColors()
     resetAllHitboxes()
 
     if Player.Character then
@@ -670,7 +702,6 @@ local function stopAllFunctions()
         end
     end
 
-    -- Destroy ESP
     for _, data in pairs(espStorage) do
         if data.Highlight then data.Highlight:Destroy() end
         if data.Billboard then data.Billboard:Destroy() end
@@ -678,7 +709,6 @@ local function stopAllFunctions()
     end
     espStorage = {}
 
-    -- Destroy GUIs
     pcall(function() Gui:Destroy() end)
     pcall(function() ExtGui:Destroy() end)
     pcall(function() BotEditorGui:Destroy() end)
@@ -687,6 +717,9 @@ local function stopAllFunctions()
     pcall(function() MimicMenuBtnGui:Destroy() end)
     pcall(function() FlyGui:Destroy() end)
     pcall(function() BotButtonGui:Destroy() end)
+
+    -- Clear waypoints
+    clearWaypointBeams()
 end
 
 -- ==================== ESP FUNCTIONS ====================
@@ -1058,6 +1091,19 @@ local function updateMMMimicTarget()
     end
 end
 
+-- Телепорт к цели
+local function teleportToTarget()
+    if not Features.Mimic.Target or not Features.Mimic.Target.Parent then return end
+    local target = Features.Mimic.Target
+    if not target.Character or not target.Character:FindFirstChild("HumanoidRootPart") then return end
+    if not Player.Character or not Player.Character:FindFirstChild("HumanoidRootPart") then return end
+    local targetRoot = target.Character.HumanoidRootPart
+    local myRoot = Player.Character.HumanoidRootPart
+    local tc = targetRoot.CFrame
+    local offset = Features.Mimic.FollowOffsetEnabled and Features.Mimic.FollowOffset or 0
+    myRoot.CFrame = CFrame.new(tc.Position + (-tc.LookVector * offset), tc.Position)
+end
+
 RandomTargetBtn.Activated:Connect(function()
     local players = {}
     for _, plr in pairs(Players:GetPlayers()) do
@@ -1069,11 +1115,11 @@ RandomTargetBtn.Activated:Connect(function()
         Features.Mimic.Target = players[math.random(1, #players)]
         updateMMMimicTarget()
         updateMimicDisplay()
+        teleportToTarget()
     end
 end)
 
--- Follow Offset toggle + input in Mimic Menu
-local MMFollowOffsetToggle = false
+-- Follow Offset toggle + input in Mimic Menu (apply only on button press)
 local MMFollowOffsetContainer = Instance.new("Frame")
 MMFollowOffsetContainer.Size = UDim2.new(1, -16, 0, 34)
 MMFollowOffsetContainer.Position = UDim2.new(0, 8, 0, 98)
@@ -1119,19 +1165,22 @@ MMFOButton.Parent = MMFollowOffsetContainer
 addCorner(MMFOButton, 3)
 
 MMFOButton.Activated:Connect(function()
-    MMFollowOffsetToggle = not MMFollowOffsetToggle
-    MMFOButton.BackgroundColor3 = MMFollowOffsetToggle and Color3.fromRGB(60, 140, 60) or Color3.fromRGB(22, 22, 34)
-    MMFOButton.Text = MMFollowOffsetToggle and "ON" or "OFF"
-    MMFOButton.TextColor3 = MMFollowOffsetToggle and Color3.new(1, 1, 1) or Color3.fromRGB(180, 180, 200)
-    Features.Mimic.FollowOffset = tonumber(MMFOInput.Text) or 5
+    Features.Mimic.FollowOffsetEnabled = not Features.Mimic.FollowOffsetEnabled
+    if Features.Mimic.FollowOffsetEnabled then
+        Features.Mimic.FollowOffset = tonumber(MMFOInput.Text) or 5
+    else
+        Features.Mimic.FollowOffset = 0
+    end
+    MMFOButton.BackgroundColor3 = Features.Mimic.FollowOffsetEnabled and Color3.fromRGB(60, 140, 60) or Color3.fromRGB(22, 22, 34)
+    MMFOButton.Text = Features.Mimic.FollowOffsetEnabled and "ON" or "OFF"
+    MMFOButton.TextColor3 = Features.Mimic.FollowOffsetEnabled and Color3.new(1, 1, 1) or Color3.fromRGB(180, 180, 200)
+    -- Teleport if mimic is active
+    if Features.Mimic.Enabled and Features.Mimic.Target then
+        teleportToTarget()
+    end
 end)
 
-MMFOInput.FocusLost:Connect(function()
-    Features.Mimic.FollowOffset = math.clamp(tonumber(MMFOInput.Text) or 5, 0, 50)
-end)
-
--- Follow Delay toggle + input in Mimic Menu
-local MMFollowDelayToggle = false
+-- Follow Delay toggle + input in Mimic Menu (apply only on button press)
 local MMFollowDelayContainer = Instance.new("Frame")
 MMFollowDelayContainer.Size = UDim2.new(1, -16, 0, 34)
 MMFollowDelayContainer.Position = UDim2.new(0, 8, 0, 138)
@@ -1177,18 +1226,18 @@ MMFDButton.Parent = MMFollowDelayContainer
 addCorner(MMFDButton, 3)
 
 MMFDButton.Activated:Connect(function()
-    MMFollowDelayToggle = not MMFollowDelayToggle
-    MMFDButton.BackgroundColor3 = MMFollowDelayToggle and Color3.fromRGB(60, 140, 60) or Color3.fromRGB(22, 22, 34)
-    MMFDButton.Text = MMFollowDelayToggle and "ON" or "OFF"
-    MMFDButton.TextColor3 = MMFollowDelayToggle and Color3.new(1, 1, 1) or Color3.fromRGB(180, 180, 200)
-    Features.Mimic.PositionDelay = tonumber(MMFDInput.Text) or 0.1
+    Features.Mimic.FollowDelayEnabled = not Features.Mimic.FollowDelayEnabled
+    if Features.Mimic.FollowDelayEnabled then
+        Features.Mimic.PositionDelay = tonumber(MMFDInput.Text) or 0.1
+    else
+        Features.Mimic.PositionDelay = 0.1 -- стандартное
+    end
+    MMFDButton.BackgroundColor3 = Features.Mimic.FollowDelayEnabled and Color3.fromRGB(60, 140, 60) or Color3.fromRGB(22, 22, 34)
+    MMFDButton.Text = Features.Mimic.FollowDelayEnabled and "ON" or "OFF"
+    MMFDButton.TextColor3 = Features.Mimic.FollowDelayEnabled and Color3.new(1, 1, 1) or Color3.fromRGB(180, 180, 200)
 end)
 
-MMFDInput.FocusLost:Connect(function()
-    Features.Mimic.PositionDelay = math.clamp(tonumber(MMFDInput.Text) or 0.1, 0, 5)
-end)
-
--- Mimic Menu Toggle Button (round, black, rainbow border)
+-- Mimic Menu Toggle Button
 local MimicMenuBtnGui = Instance.new("ScreenGui")
 MimicMenuBtnGui.Name = "MimicMenuBtn"
 MimicMenuBtnGui.Parent = CoreGui
@@ -1852,30 +1901,40 @@ layout4:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
 end)
 
 local playerListOpen = false
-local playerListFrame = nil
+local playerListScrollingFrame = nil
 
 local function closePlayerList()
-    if playerListFrame and playerListFrame.Parent then
-        playerListFrame:Destroy()
+    if playerListScrollingFrame and playerListScrollingFrame.Parent then
+        playerListScrollingFrame:Destroy()
     end
-    playerListFrame = nil
+    playerListScrollingFrame = nil
     playerListOpen = false
+    updateCanvas(page4, layout4)
 end
 
 local function togglePlayerList()
     playerListOpen = not playerListOpen
     if playerListOpen then
-        playerListFrame = Instance.new("Frame")
-        playerListFrame.Size = UDim2.new(1, 0, 0, 200)
-        playerListFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
-        playerListFrame.BorderSizePixel = 0
-        playerListFrame.Parent = page4
-        addCorner(playerListFrame, 5)
-        addStroke(playerListFrame, 1, Color3.fromRGB(60, 100, 255))
+        -- Создаем ScrollingFrame для списка игроков
+        playerListScrollingFrame = Instance.new("ScrollingFrame")
+        playerListScrollingFrame.Size = UDim2.new(1, 0, 0, 150)
+        playerListScrollingFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
+        playerListScrollingFrame.BorderSizePixel = 0
+        playerListScrollingFrame.ScrollBarThickness = 3
+        playerListScrollingFrame.ScrollBarImageColor3 = Color3.fromRGB(40, 40, 55)
+        playerListScrollingFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+        playerListScrollingFrame.Parent = page4
+        addCorner(playerListScrollingFrame, 5)
+        addStroke(playerListScrollingFrame, 1, Color3.fromRGB(60, 100, 255))
 
         local plLayout = Instance.new("UIListLayout")
         plLayout.Padding = UDim.new(0, 2)
-        plLayout.Parent = playerListFrame
+        plLayout.Parent = playerListScrollingFrame
+
+        -- Обновляем CanvasSize когда добавляются элементы
+        plLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+            playerListScrollingFrame.CanvasSize = UDim2.new(0, 0, 0, plLayout.AbsoluteContentSize.Y + 8)
+        end)
 
         for _, plr in pairs(Players:GetPlayers()) do
             if plr ~= Player then
@@ -1888,7 +1947,7 @@ local function togglePlayerList()
                 plrBtn.Font = Enum.Font.Gotham
                 plrBtn.TextSize = 10
                 plrBtn.BorderSizePixel = 0
-                plrBtn.Parent = playerListFrame
+                plrBtn.Parent = playerListScrollingFrame
                 addCorner(plrBtn, 4)
                 plrBtn.Activated:Connect(function()
                     Features.Mimic.Target = plr
@@ -1898,10 +1957,14 @@ local function togglePlayerList()
                 end)
             end
         end
+        -- Установим начальный размер Canvas
+        local count = 0
+        for _, _ in pairs(Players:GetPlayers()) do count = count + 1 end
+        playerListScrollingFrame.CanvasSize = UDim2.new(0, 0, 0, (count - 1) * 26 + 8)
+
         updateCanvas(page4, layout4)
     else
         closePlayerList()
-        updateCanvas(page4, layout4)
     end
 end
 
@@ -1934,11 +1997,13 @@ addToggle(page4, layout4, "Start Mimic", function(e)
             updateMimicDisplay()
             updateMMMimicTarget()
             Features.Mimic.Enabled = false
+            MimicMenuBtn.Visible = false
             return
         end
         local target = Features.Mimic.Target
         if not target.Character or not target.Character:FindFirstChild("HumanoidRootPart") then
             Features.Mimic.Enabled = false
+            MimicMenuBtn.Visible = false
             return
         end
         local lastCFrame = target.Character.HumanoidRootPart.CFrame
@@ -1949,7 +2014,8 @@ addToggle(page4, layout4, "Start Mimic", function(e)
                 myHum.WalkSpeed = 0
                 myRoot.Anchored = false
                 local tc = target.Character.HumanoidRootPart.CFrame
-                myRoot.CFrame = CFrame.new(tc.Position + (-tc.LookVector * Features.Mimic.FollowOffset), tc.Position)
+                local offset = Features.Mimic.FollowOffsetEnabled and Features.Mimic.FollowOffset or 0
+                myRoot.CFrame = CFrame.new(tc.Position + (-tc.LookVector * offset), tc.Position)
             end
         end
         local lastJump = 0
@@ -1967,8 +2033,10 @@ addToggle(page4, layout4, "Start Mimic", function(e)
             local myHum = Player.Character:FindFirstChild("Humanoid")
             if not myRoot or not myHum then return end
             local tc = targetRoot.CFrame
-            local offPos = tc.Position + (-tc.LookVector * Features.Mimic.FollowOffset)
-            task.wait(Features.Mimic.PositionDelay)
+            local offset = Features.Mimic.FollowOffsetEnabled and Features.Mimic.FollowOffset or 0
+            local offPos = tc.Position + (-tc.LookVector * offset)
+            local delay = Features.Mimic.FollowDelayEnabled and Features.Mimic.PositionDelay or 0.1
+            task.wait(delay)
             if Features.Mimic.SmoothFollow and lastCFrame then
                 myRoot.CFrame = CFrame.new(myRoot.Position:Lerp(offPos, 0.15), tc.Position)
             else
@@ -1985,7 +2053,6 @@ addToggle(page4, layout4, "Start Mimic", function(e)
         end)
     else
         stopMimic()
-        MimicMenuBtn.Visible = false
     end
 end)
 
@@ -2113,7 +2180,45 @@ local function addBEBtn(text, cb)
     return btn
 end
 
--- Create waypoint with beam that follows player
+-- Update beam attachments for waypoints (chain: player -> WP1, WP1 -> WP2, etc.)
+local function updateWaypointBeams()
+    local root = Player.Character and Player.Character:FindFirstChild("HumanoidRootPart")
+    for i, wp in pairs(Features.Bot.Waypoints) do
+        if wp.Beam and wp.Beam.Parent and wp.Beam.Attachment0 then
+            if i == 1 and root then
+                -- First WP: beam from player to WP1
+                wp.Beam.Attachment0.Position = root.Position
+            elseif i > 1 then
+                local prevWp = Features.Bot.Waypoints[i-1]
+                if prevWp and prevWp.Part and prevWp.Part.Parent then
+                    wp.Beam.Attachment0.Parent = prevWp.Part
+                elseif root then
+                    wp.Beam.Attachment0.Position = root.Position
+                end
+            end
+        end
+    end
+end
+
+-- Highlight current waypoint green
+local function highlightWaypoint(index)
+    resetWaypointColors()
+    if index > 0 and index <= #Features.Bot.Waypoints then
+        local wp = Features.Bot.Waypoints[index]
+        if wp.Part and wp.Part.Parent then
+            wp.Part.Color = Color3.fromRGB(0, 255, 0)
+            if wp.Beam and wp.Beam.Parent then
+                wp.Beam.Color = ColorSequence.new(Color3.fromRGB(0, 255, 0))
+            end
+            for _, child in pairs(wp.Part:GetChildren()) do
+                if child:IsA("PointLight") then
+                    child.Color = Color3.fromRGB(0, 255, 0)
+                end
+            end
+        end
+    end
+end
+
 addBEBtn("📍 Create Waypoint", function()
     if not Player.Character or not Player.Character:FindFirstChild("HumanoidRootPart") then return end
     local root = Player.Character.HumanoidRootPart
@@ -2154,6 +2259,19 @@ addBEBtn("📍 Create Waypoint", function()
     beam.Attachment0 = Instance.new("Attachment")
     beam.Attachment1 = Instance.new("Attachment")
     beam.Attachment1.Parent = part
+
+    if n == 1 and root then
+        -- First WP: beam from player
+        beam.Attachment0.Parent = root
+    elseif n > 1 then
+        local prevWp = Features.Bot.Waypoints[n-1]
+        if prevWp and prevWp.Part and prevWp.Part.Parent then
+            beam.Attachment0.Parent = prevWp.Part
+        elseif root then
+            beam.Attachment0.Parent = root
+        end
+    end
+
     beam.Width0 = 0.2
     beam.Width1 = 0.2
     beam.Color = ColorSequence.new(Color3.fromRGB(60, 100, 255))
@@ -2162,7 +2280,8 @@ addBEBtn("📍 Create Waypoint", function()
 
     table.insert(Features.Bot.Waypoints, {Part = part, Beam = beam, Position = pos})
     table.insert(botWaypointBeams, beam)
-    lastWaypointPart = part
+    table.insert(botWaypointParts, part)
+    updateWaypointBeams()
 end)
 
 addBEBtn("🗑 Clear Waypoints", function()
@@ -2172,7 +2291,7 @@ addBEBtn("🗑 Clear Waypoints", function()
     end
     Features.Bot.Waypoints = {}
     clearWaypointBeams()
-    lastWaypointPart = nil
+    botWaypointParts = {}
     stopBot()
 end)
 
@@ -2205,8 +2324,11 @@ botToggleBtn.Activated:Connect(function()
         botToggleBtn.Text = "⏸ Stop Bot"
         botToggleStroke.Color = Color3.fromRGB(60, 140, 60)
 
+        Features.Bot.CurrentWaypointIndex = 1
         local currentIdx = 1
         local jumpedOnCurrent = false
+        highlightWaypoint(currentIdx)
+
         botConnections.Walk = RunService.Heartbeat:Connect(function()
             if not Features.Bot.Enabled then return end
             if not Player.Character then return end
@@ -2218,13 +2340,7 @@ botToggleBtn.Activated:Connect(function()
                 return
             end
 
-            -- Update beam attachments to follow player
-            if lastWaypointPart and lastWaypointPart.Parent then
-                local firstWp = Features.Bot.Waypoints[1]
-                if firstWp and firstWp.Beam and firstWp.Beam.Parent and firstWp.Beam.Attachment0 then
-                    firstWp.Beam.Attachment0.Position = root.Position
-                end
-            end
+            updateWaypointBeams()
 
             local wp = Features.Bot.Waypoints[currentIdx]
             if not wp or not wp.Part or not wp.Part.Parent then
@@ -2244,6 +2360,7 @@ botToggleBtn.Activated:Connect(function()
                     return
                 end
                 jumpedOnCurrent = false
+                highlightWaypoint(currentIdx)
             end
 
             local targetPos = wp.Position
@@ -2272,6 +2389,8 @@ botToggleBtn.Activated:Connect(function()
                 currentIdx = currentIdx + 1
                 if currentIdx > #Features.Bot.Waypoints then currentIdx = 1 end
                 jumpedOnCurrent = false
+                Features.Bot.CurrentWaypointIndex = currentIdx
+                highlightWaypoint(currentIdx)
             end
         end)
     else
@@ -2357,16 +2476,14 @@ Player.CharacterAdded:Connect(function(char)
     if autoJumpEnabled then
         startAutoJump()
     end
-    -- Update beam for bot waypoints
+    -- Update waypoint beams
+    updateWaypointBeams()
+end)
+
+-- Update waypoint beams constantly
+RunService.Heartbeat:Connect(function()
     if #Features.Bot.Waypoints > 0 then
-        local root = char:FindFirstChild("HumanoidRootPart")
-        if root then
-            for _, wp in pairs(Features.Bot.Waypoints) do
-                if wp.Beam and wp.Beam.Parent and wp.Beam.Attachment0 then
-                    wp.Beam.Attachment0.Position = root.Position
-                end
-            end
-        end
+        updateWaypointBeams()
     end
 end)
 
