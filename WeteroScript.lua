@@ -1898,4 +1898,41 @@ if TabBtns[1] then
     TabBtns[1].TextColor3 = Color3.new(1, 1, 1)
 end
 
+-- ВСТАВЬ ЭТУ ЧАСТЬ В КОНЕЦ СКРИПТА ВМЕСТО СТАРОЙ
+
+-- ==================== ОТКРЫТИЕ ГАРАНТИРОВАНО ====================
+local isOpen = false
+
+-- Проверка что все элементы существуют
+local function safeOpen()
+    if Window then
+        isOpen = not isOpen
+        Window.Visible = isOpen
+        print("GUI open:", isOpen)
+    else
+        warn("Window not found")
+    end
+end
+
+-- Открытие по белой кнопке
+if WhiteBtn then
+    WhiteBtn.Activated:Connect(safeOpen)
+    print("Button connected")
+else
+    warn("WhiteBtn not found")
+end
+
+-- Закрытие по крестику
+if CloseBtn then
+    CloseBtn.Activated:Connect(function()
+        isOpen = false
+        Window.Visible = false
+    end)
+end
+
+-- ДЛЯ ТЕСТА - ПРИНУДИТЕЛЬНО ОТКРЫВАЕМ ЧЕРЕЗ 1 СЕКУНДУ
+task.wait(1)
+Window.Visible = true
+print("FORCED OPEN")
+
 print("✅ WeteroScript v13.1 FULL loaded!")
