@@ -1601,7 +1601,3 @@ if TabBtns[1] then
     TabBtns[1].BackgroundColor3 = Color3.fromRGB(60, 60, 80)
     TabBtns[1].TextColor3 = Color3.new(1, 1, 1)
 end
-
--- Refresh ESP on startup
-task.wait(1)
-refreshESP()
