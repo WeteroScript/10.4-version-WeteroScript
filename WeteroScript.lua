@@ -1,7 +1,7 @@
 --[[
-    WeteroScript v11.03 FIXED v12.2
+    WeteroScript v11.03 FINAL FIXED v13
     Author: @WeteroScript
-    FIX: Menu button click handler
+    FIXED: MouseButton1Click removed, Activated only for mobile
 ]]
 
 -- ==================== SERVICES ====================
@@ -237,7 +237,7 @@ local connections = {}; local espStorage = {}; local mimicConnections = {}; loca
 local lastWPToPlayerBeam = nil; local allBeams = {}
 local flyActive = false; local flyHeartbeat
 
--- ==================== BEAM FUNCTIONS ====================
+-- ==================== BEAM FUNCTIONS (ORIGINAL BOT EDITOR LINES) ====================
 local function registerBeam(beam)
     table.insert(allBeams, beam)
 end
@@ -258,13 +258,24 @@ local function createBeamBetweenParts(partA, partB)
         if child:IsA("Attachment") and child.Name == "BeamAtt" then child:Destroy() end
     end
     
-    local att1 = Instance.new("Attachment"); att1.Name = "BeamAtt"; att1.Parent = partA
-    local att2 = Instance.new("Attachment"); att2.Name = "BeamAtt"; att2.Parent = partB
+    local att1 = Instance.new("Attachment")
+    att1.Name = "BeamAtt"
+    att1.Parent = partA
     
-    local beam = Instance.new("Beam"); beam.Attachment0 = att1; beam.Attachment1 = att2
-    beam.Width0 = 0.3; beam.Width1 = 0.3
-    beam.Color = ColorSequence.new(Color3.fromRGB(0, 200, 255)); beam.Transparency = NumberSequence.new(0.2)
-    beam.Parent = partA; return beam
+    local att2 = Instance.new("Attachment")
+    att2.Name = "BeamAtt"
+    att2.Parent = partB
+    
+    local beam = Instance.new("Beam")
+    beam.Attachment0 = att1
+    beam.Attachment1 = att2
+    beam.Width0 = 0.3
+    beam.Width1 = 0.3
+    beam.Color = ColorSequence.new(Color3.fromRGB(0, 200, 255))
+    beam.Transparency = NumberSequence.new(0.2)
+    beam.Parent = partA
+    
+    return beam
 end
 
 local function createLastWPToPlayerBeam()
@@ -283,18 +294,29 @@ local function createLastWPToPlayerBeam()
         if child:IsA("Attachment") and child.Name == "PlayerBeamAtt" then child:Destroy() end
     end
     
-    local attWp = Instance.new("Attachment"); attWp.Name = "PlayerBeamAtt"; attWp.Parent = lastWp.Part
-    local attPlayer = Instance.new("Attachment"); attPlayer.Name = "PlayerBeamAtt"; attPlayer.Parent = root
+    local attWp = Instance.new("Attachment")
+    attWp.Name = "PlayerBeamAtt"
+    attWp.Parent = lastWp.Part
+    local attPlayer = Instance.new("Attachment")
+    attPlayer.Name = "PlayerBeamAtt"
+    attPlayer.Parent = root
     
-    local beam = Instance.new("Beam"); beam.Attachment0 = attWp; beam.Attachment1 = attPlayer
-    beam.Width0 = 0.2; beam.Width1 = 0.2
-    beam.Color = ColorSequence.new(Color3.fromRGB(255, 100, 0)); beam.Transparency = NumberSequence.new(0.3)
+    local beam = Instance.new("Beam")
+    beam.Attachment0 = attWp
+    beam.Attachment1 = attPlayer
+    beam.Width0 = 0.2
+    beam.Width1 = 0.2
+    beam.Color = ColorSequence.new(Color3.fromRGB(255, 100, 0))
+    beam.Transparency = NumberSequence.new(0.3)
     beam.Parent = lastWp.Part
-    lastWPToPlayerBeam = beam; registerBeam(beam)
+    lastWPToPlayerBeam = beam
+    registerBeam(beam)
 end
 
 local function removeLastWPToPlayerBeam()
-    if lastWPToPlayerBeam and lastWPToPlayerBeam.Parent then destroyBeam(lastWPToPlayerBeam) end
+    if lastWPToPlayerBeam and lastWPToPlayerBeam.Parent then
+        destroyBeam(lastWPToPlayerBeam)
+    end
     lastWPToPlayerBeam = nil
 end
 
@@ -325,10 +347,14 @@ local function addChatMessage(speaker, message)
     end
     
     if chatScrollingFrame and chatScrollingFrame.Parent then
+        -- Clear old messages
         for _, child in pairs(chatScrollingFrame:GetChildren()) do
-            if child:IsA("TextLabel") then child:Destroy() end
+            if child:IsA("TextLabel") then
+                child:Destroy()
+            end
         end
         
+        -- Rebuild messages (newest at bottom)
         local yOffset = 0
         for i = #chatMessages, 1, -1 do
             local msg = chatMessages[i]
@@ -336,53 +362,77 @@ local function addChatMessage(speaker, message)
             lbl.Size = UDim2.new(1, -10, 0, 20)
             lbl.Position = UDim2.new(0, 5, 0, yOffset)
             lbl.BackgroundTransparency = 1
-            lbl.Text = msg; lbl.TextColor3 = Color3.fromRGB(200, 200, 200)
-            lbl.Font = Enum.Font.Gotham; lbl.TextSize = 11
-            lbl.TextXAlignment = Enum.TextXAlignment.Left; lbl.TextWrapped = true
+            lbl.Text = msg
+            lbl.TextColor3 = Color3.fromRGB(200, 200, 200)
+            lbl.Font = Enum.Font.Gotham
+            lbl.TextSize = 11
+            lbl.TextXAlignment = Enum.TextXAlignment.Left
+            lbl.TextWrapped = true
             lbl.Parent = chatScrollingFrame
             yOffset = yOffset + 22
         end
         
         chatScrollingFrame.CanvasSize = UDim2.new(0, 0, 0, yOffset + 10)
-        chatScrollingFrame.CanvasPosition = Vector2.new(0, math.max(0, yOffset - chatScrollingFrame.AbsoluteSize.Y + 20))
+        chatScrollingFrame.CanvasPosition = Vector2.new(0, yOffset)
     end
 end
 
 local function sendChatMessage(message)
     if message == "" or message == nil then return end
     
-    pcall(function()
+    local success = pcall(function()
+        -- Try new TextChatService
         local textChannels = TextChatService:FindFirstChild("TextChannels")
         if textChannels then
             local rbxlGeneral = textChannels:FindFirstChild("RBXGeneral")
-            if rbxlGeneral then rbxlGeneral:SendAsync(message); return end
+            if rbxlGeneral then
+                rbxlGeneral:SendAsync(message)
+                return
+            end
         end
         
+        -- Try old RemoteEvent
         local chatEvents = ReplicatedStorage:FindFirstChild("DefaultChatSystemChatEvents")
         if chatEvents then
             local sayMessageRequest = chatEvents:FindFirstChild("SayMessageRequest")
-            if sayMessageRequest then sayMessageRequest:FireServer(message, "All"); return end
+            if sayMessageRequest then
+                sayMessageRequest:FireServer(message, "All")
+                return
+            end
         end
         
+        -- Another fallback
         local chat = ReplicatedStorage:FindFirstChild("Chat")
         if chat then
             local remote = chat:FindFirstChild("SendMessage")
-            if remote then remote:FireServer(message); return end
+            if remote then
+                remote:FireServer(message)
+                return
+            end
         end
     end)
+    
+    if not success then
+        warn("Failed to send message")
+    end
 end
 
+-- Hook into chat to receive messages
 local function setupChatHook()
-    pcall(function()
-        local conn = TextChatService.MessageReceived:Connect(function(message)
+    -- New TextChatService
+    local success, conn = pcall(function()
+        return TextChatService.MessageReceived:Connect(function(message)
             if message and message.Text then
                 local speaker = message.TextSource and message.TextSource.Name or "Unknown"
                 addChatMessage(speaker, message.Text)
             end
         end)
+    end
+    if success and conn then
         table.insert(connections, conn)
-    end)
+    end
     
+    -- Old chat system
     local chatEvents = ReplicatedStorage:FindFirstChild("DefaultChatSystemChatEvents")
     if chatEvents then
         local onMessageDone = chatEvents:FindFirstChild("OnMessageDoneFiltering")
@@ -403,6 +453,7 @@ chatContainer.Size = UDim2.new(1, 0, 1, 0)
 chatContainer.BackgroundTransparency = 1
 chatContainer.Parent = page6
 
+-- Chat display ScrollingFrame
 chatScrollingFrame = Instance.new("ScrollingFrame")
 chatScrollingFrame.Size = UDim2.new(1, -10, 1, -50)
 chatScrollingFrame.Position = UDim2.new(0, 5, 0, 5)
@@ -415,12 +466,14 @@ chatScrollingFrame.Parent = chatContainer
 addCorner(chatScrollingFrame, 6)
 addStroke(chatScrollingFrame, 1, Color3.fromRGB(60, 100, 255))
 
+-- Input frame
 local inputFrame = Instance.new("Frame")
 inputFrame.Size = UDim2.new(1, -10, 0, 35)
 inputFrame.Position = UDim2.new(0, 5, 1, -40)
 inputFrame.BackgroundTransparency = 1
 inputFrame.Parent = chatContainer
 
+-- TextBox for message
 chatMessageBox = Instance.new("TextBox")
 chatMessageBox.Size = UDim2.new(1, -90, 1, 0)
 chatMessageBox.Position = UDim2.new(0, 0, 0, 0)
@@ -436,6 +489,7 @@ chatMessageBox.Parent = inputFrame
 addCorner(chatMessageBox, 5)
 addStroke(chatMessageBox, 1, Color3.fromRGB(60, 100, 255))
 
+-- Send button
 chatSendButton = Instance.new("TextButton")
 chatSendButton.Size = UDim2.new(0, 80, 1, 0)
 chatSendButton.Position = UDim2.new(1, -85, 0, 0)
@@ -450,16 +504,23 @@ addCorner(chatSendButton, 5)
 
 chatSendButton.Activated:Connect(function()
     local msg = chatMessageBox.Text
-    if msg ~= "" then sendChatMessage(msg); chatMessageBox.Text = "" end
+    if msg ~= "" then
+        sendChatMessage(msg)
+        chatMessageBox.Text = ""
+    end
 end)
 
 chatMessageBox.FocusLost:Connect(function(enterPressed)
     if enterPressed then
         local msg = chatMessageBox.Text
-        if msg ~= "" then sendChatMessage(msg); chatMessageBox.Text = "" end
+        if msg ~= "" then
+            sendChatMessage(msg)
+            chatMessageBox.Text = ""
+        end
     end
 end)
 
+-- Add test message
 addChatMessage("System", "Chat tab loaded. Messages will appear here.")
 
 -- ==================== CLEANUP FUNCTIONS ====================
@@ -506,10 +567,6 @@ local function stopBot()
         if hum then hum.WalkSpeed = Features.Speed.Enabled and Features.Speed.Value or 16 end
     end
     resetWaypointColors()
-    if botToggleBtn and botToggleBtn.Parent then
-        botToggleBtn.Text = "▶ Start Bot"
-        if botToggleStroke then botToggleStroke.Color = Color3.fromRGB(40, 40, 60) end
-    end
     createLastWPToPlayerBeam()
 end
 
@@ -543,16 +600,15 @@ local function stopAllFunctions()
     pcall(function() if FlyControlWindow then FlyControlWindow.Visible = false end end)
     if Player.Character then local hum = Player.Character:FindFirstChild("Humanoid"); if hum then hum.WalkSpeed = 16; hum.JumpPower = 50; hum.PlatformStand = false end; local root = Player.Character:FindFirstChild("HumanoidRootPart"); if root then root.Anchored = false end; for _, p in pairs(Player.Character:GetDescendants()) do if p:IsA("BasePart") then p.Transparency = 0; p.CanCollide = true end end end
     for _, data in pairs(espStorage) do if data.Highlight then data.Highlight:Destroy() end; if data.Billboard then data.Billboard:Destroy() end; if data.HPConnection then data.HPConnection:Disconnect() end end; espStorage = {}
-    for _, conns in pairs(dragConnections) do for _, c in pairs(conns) do pcall(function() c:Disconnect() end) end end
-    dragConnections = {}
     pcall(function() Gui:Destroy() end); pcall(function() ExtGui:Destroy() end); pcall(function() BotEditorGui:Destroy() end); pcall(function() ColorPickerGui:Destroy() end)
     pcall(function() if MimicMenuGui then MimicMenuGui:Destroy() end end); pcall(function() if MimicMenuBtnGui then MimicMenuBtnGui:Destroy() end end); pcall(function() if FlyGui then FlyGui:Destroy() end end); pcall(function() if BotButtonGui then BotButtonGui:Destroy() end end)
     pcall(function() if FlyControlGui then FlyControlGui:Destroy() end end)
-    clearWaypointBeams(); clearAllWaypointBeams()
+    clearWaypointBeams()
+    clearAllWaypointBeams()
     for i = 1, #rainbowStrokes do rainbowStrokes[i] = nil end
 end
 
--- ==================== ESP FUNCTIONS ====================
+-- ==================== ESP FUNCTIONS (FIXED FOR NEW PLAYERS) ====================
 local function refreshESP()
     for _, data in pairs(espStorage) do 
         if data.Highlight then data.Highlight:Destroy() end
@@ -592,7 +648,9 @@ local function refreshESP()
             bar.Parent = bg
             espStorage[char].Billboard = bb
             espStorage[char].HPConnection = hum:GetPropertyChangedSignal("Health"):Connect(function()
-                if bar and bar.Parent then bar.Size = UDim2.new(hum.Health / hum.MaxHealth, 0, 1, 0) end
+                if bar and bar.Parent then
+                    bar.Size = UDim2.new(hum.Health / hum.MaxHealth, 0, 1, 0)
+                end
             end)
         end
     end
@@ -634,12 +692,15 @@ local function refreshESP()
                 bar.Parent = bg
                 espStorage[char].Billboard = bb
                 espStorage[char].HPConnection = hum:GetPropertyChangedSignal("Health"):Connect(function()
-                    if bar and bar.Parent then bar.Size = UDim2.new(hum.Health / hum.MaxHealth, 0, 1, 0) end
+                    if bar and bar.Parent then
+                        bar.Size = UDim2.new(hum.Health / hum.MaxHealth, 0, 1, 0)
+                    end
                 end)
             end
         end
     end
     
+    -- Apply to existing players
     for _, plr in pairs(Players:GetPlayers()) do
         if plr ~= Player and plr.Character then
             if Features.ESP.HPBarOnly and not Features.ESP.Enabled then
@@ -650,10 +711,12 @@ local function refreshESP()
         end
     end
     
+    -- Listen for new players
     if connections.PlayerAdded then connections.PlayerAdded:Disconnect() end
     connections.PlayerAdded = Players.PlayerAdded:Connect(function(plr)
         if plr == Player then return end
         
+        -- When new player joins, add ESP to their character when it appears
         local function onCharAdded(char)
             task.wait(0.5)
             if char and char.Parent then
@@ -665,12 +728,17 @@ local function refreshESP()
             end
         end
         
+        -- Connect to CharacterAdded for this player
         local charConn = plr.CharacterAdded:Connect(onCharAdded)
         table.insert(connections, charConn)
         
-        if plr.Character then onCharAdded(plr.Character) end
+        -- Check if character already exists
+        if plr.Character then
+            onCharAdded(plr.Character)
+        end
     end)
     
+    -- Listen for CharacterAdded on existing players (in case they respawn)
     for _, plr in pairs(Players:GetPlayers()) do
         if plr ~= Player then
             local existingConn = plr.CharacterAdded:Connect(function(char)
@@ -687,6 +755,7 @@ local function refreshESP()
         end
     end
     
+    -- Cleanup dead characters
     if connections.ESP then connections.ESP:Disconnect() end
     connections.ESP = RunService.Stepped:Connect(function()
         for char, data in pairs(espStorage) do
@@ -737,15 +806,25 @@ local function highlightWaypoint(index)
 end
 
 local function startBotMovement()
-    if #Features.Bot.Waypoints == 0 then stopBot(); return end
-    local currentIdx = 1; local jumpedOnCurrent = false
-    if botConnections.Walk then botConnections.Walk:Disconnect() end
+    if #Features.Bot.Waypoints == 0 then
+        stopBot()
+        return
+    end
+    
+    local currentIdx = 1
+    local jumpedOnCurrent = false
+    
+    if botConnections.Walk then
+        botConnections.Walk:Disconnect()
+    end
     
     botConnections.Walk = RunService.Heartbeat:Connect(function()
         if not Features.Bot.Enabled then return end
         if not Player.Character then return end
+        
         local root = Player.Character:FindFirstChild("HumanoidRootPart")
         local hum = Player.Character:FindFirstChild("Humanoid")
+        
         if not root or not hum or hum.Health <= 0 then return end
         if #Features.Bot.Waypoints == 0 then stopBot(); return end
         
@@ -756,23 +835,33 @@ local function startBotMovement()
                 currentIdx = currentIdx + 1
                 if currentIdx > #Features.Bot.Waypoints then currentIdx = 1 end
                 local cw = Features.Bot.Waypoints[currentIdx]
-                if cw and cw.Part and cw.Part.Parent then wp = cw; found = true; break end
+                if cw and cw.Part and cw.Part.Parent then
+                    wp = cw
+                    found = true
+                    break
+                end
             end
             if not found then stopBot(); return end
-            jumpedOnCurrent = false; highlightWaypoint(currentIdx)
+            jumpedOnCurrent = false
+            highlightWaypoint(currentIdx)
         end
         
-        local targetPos = wp.Position; local distance = (root.Position - targetPos).Magnitude
+        local targetPos = wp.Position
+        local distance = (root.Position - targetPos).Magnitude
+        
         local lookAtCFrame = CFrame.lookAt(root.Position, Vector3.new(targetPos.X, root.Position.Y, targetPos.Z))
         root.CFrame = CFrame.new(root.Position, lookAtCFrame.LookVector)
         
         if distance > 4 then
             jumpedOnCurrent = false
+            
             local moveDir = (targetPos - root.Position).Unit
             local moveDistance = math.min((Features.Bot.SpeedEnabled and Features.Bot.Speed or 16) * 0.05, distance)
             root.CFrame = root.CFrame + (moveDir * moveDistance)
+            
             hum:Move(moveDir, false)
             hum.WalkSpeed = Features.Bot.SpeedEnabled and Features.Bot.Speed or 16
+            
             local rayOrigin = root.Position + Vector3.new(0, 1, 0)
             local raycastResult = Workspace:Raycast(rayOrigin, moveDir * 3)
             if raycastResult and raycastResult.Instance and raycastResult.Instance.CanCollide then
@@ -780,12 +869,17 @@ local function startBotMovement()
             end
         else
             if Features.Bot.JumpOnPoint and not jumpedOnCurrent then
-                hum:ChangeState(Enum.HumanoidStateType.Jumping); jumpedOnCurrent = true
+                hum:ChangeState(Enum.HumanoidStateType.Jumping)
+                jumpedOnCurrent = true
             end
+            
             currentIdx = currentIdx + 1
-            if currentIdx > #Features.Bot.Waypoints then currentIdx = 1 end
+            if currentIdx > #Features.Bot.Waypoints then
+                currentIdx = 1
+            end
             jumpedOnCurrent = false
-            Features.Bot.CurrentWaypointIndex = currentIdx; highlightWaypoint(currentIdx)
+            Features.Bot.CurrentWaypointIndex = currentIdx
+            highlightWaypoint(currentIdx)
         end
     end)
 end
@@ -873,8 +967,7 @@ local function startMimicFollow()
     end
 
     local lastJump = 0
-    mimicConnections.Main = RunService.Heartbeat:Connect(function(dt)
-        local deltaTime = dt or 0.016
+    mimicConnections.Main = RunService.Heartbeat:Connect(function(deltaTime)
         if not Features.Mimic.Enabled then return end
         if not target.Parent then stopMimic(); return end
         if not target.Character or not target.Character:FindFirstChild("HumanoidRootPart") then return end
@@ -887,7 +980,7 @@ local function startMimicFollow()
         
         local delay = Features.Mimic.FollowDelayEnabled and Features.Mimic.PositionDelay or 0
         if delay > 0 then
-            lastUpdate = lastUpdate + deltaTime
+            lastUpdate = (lastUpdate or 0) + (deltaTime or 0.016)
             if lastUpdate < delay then return end
             lastUpdate = 0
         end
@@ -905,7 +998,8 @@ local function startMimicFollow()
         if Features.Mimic.CopyJump and tHum then
             local now = tick()
             if tHum:GetState() == Enum.HumanoidStateType.Jumping and (now - lastJump) > 1 then
-                lastJump = now; mHum:ChangeState(Enum.HumanoidStateType.Jumping)
+                lastJump = now
+                mHum:ChangeState(Enum.HumanoidStateType.Jumping)
             end
         end
     end)
@@ -916,7 +1010,9 @@ local GotoTargetBtn = Instance.new("TextButton"); GotoTargetBtn.Size = UDim2.new
 GotoTargetBtn.Activated:Connect(function()
     if not Features.Mimic.Target or not Features.Mimic.Target.Parent then return end
     teleportToTarget()
-    if Features.Mimic.Enabled then startMimicFollow() end
+    if Features.Mimic.Enabled then
+        startMimicFollow()
+    end
 end)
 
 -- Random Target
@@ -927,7 +1023,9 @@ RandomTargetBtn.Activated:Connect(function()
         Features.Mimic.Target = players[math.random(1, #players)]
         updateMMMimicTarget()
         teleportToTarget()
-        if Features.Mimic.Enabled then startMimicFollow() end
+        if Features.Mimic.Enabled then
+            startMimicFollow()
+        end
     end
 end)
 
@@ -947,9 +1045,13 @@ end
 MMFOButton.Activated:Connect(function()
     Features.Mimic.FollowOffsetEnabled = not Features.Mimic.FollowOffsetEnabled
     if Features.Mimic.FollowOffsetEnabled then 
-        MMFOButton.BackgroundColor3 = Color3.fromRGB(60, 140, 60); MMFOButton.Text = "ON"; MMFOButton.TextColor3 = Color3.new(1, 1, 1) 
+        MMFOButton.BackgroundColor3 = Color3.fromRGB(60, 140, 60)
+        MMFOButton.Text = "ON"
+        MMFOButton.TextColor3 = Color3.new(1, 1, 1) 
     else 
-        MMFOButton.BackgroundColor3 = Color3.fromRGB(22, 22, 34); MMFOButton.Text = "OFF"; MMFOButton.TextColor3 = Color3.fromRGB(180, 180, 200) 
+        MMFOButton.BackgroundColor3 = Color3.fromRGB(22, 22, 34)
+        MMFOButton.Text = "OFF"
+        MMFOButton.TextColor3 = Color3.fromRGB(180, 180, 200) 
     end
     applyFollowOffset()
 end)
@@ -970,9 +1072,13 @@ end
 MMFDButton.Activated:Connect(function()
     Features.Mimic.FollowDelayEnabled = not Features.Mimic.FollowDelayEnabled
     if Features.Mimic.FollowDelayEnabled then 
-        MMFDButton.BackgroundColor3 = Color3.fromRGB(60, 140, 60); MMFDButton.Text = "ON"; MMFDButton.TextColor3 = Color3.new(1, 1, 1) 
+        MMFDButton.BackgroundColor3 = Color3.fromRGB(60, 140, 60)
+        MMFDButton.Text = "ON"
+        MMFDButton.TextColor3 = Color3.new(1, 1, 1) 
     else 
-        MMFDButton.BackgroundColor3 = Color3.fromRGB(22, 22, 34); MMFDButton.Text = "OFF"; MMFDButton.TextColor3 = Color3.fromRGB(180, 180, 200) 
+        MMFDButton.BackgroundColor3 = Color3.fromRGB(22, 22, 34)
+        MMFDButton.Text = "OFF"
+        MMFDButton.TextColor3 = Color3.fromRGB(180, 180, 200) 
     end
     applyFollowDelay()
 end)
@@ -981,7 +1087,9 @@ MMFDInput.FocusLost:Connect(function() if Features.Mimic.FollowDelayEnabled then
 -- Mimic Menu Button
 local MimicMenuBtnGui = Instance.new("ScreenGui"); MimicMenuBtnGui.Name = "MimicMenuBtn"; MimicMenuBtnGui.Parent = CoreGui; MimicMenuBtnGui.ResetOnSpawn = false
 local MimicMenuBtn = Instance.new("TextButton"); MimicMenuBtn.Size = UDim2.new(0, 50, 0, 50); MimicMenuBtn.Position = UDim2.new(0.02, 0, 0.55, -25); MimicMenuBtn.BackgroundColor3 = Color3.fromRGB(0, 0, 0); MimicMenuBtn.Text = "🎯"; MimicMenuBtn.TextColor3 = Color3.new(1, 1, 1); MimicMenuBtn.Font = Enum.Font.GothamBold; MimicMenuBtn.TextSize = 20; MimicMenuBtn.BorderSizePixel = 0; MimicMenuBtn.AutoButtonColor = false; MimicMenuBtn.Visible = false; MimicMenuBtn.Parent = MimicMenuBtnGui; addCorner(MimicMenuBtn, 25); addRainbowStroke(MimicMenuBtn, 2)
-MimicMenuBtn.Activated:Connect(function() if MimicMenuWindow then MimicMenuWindow.Visible = not MimicMenuWindow.Visible end end)
+MimicMenuBtn.Activated:Connect(function() 
+    if MimicMenuWindow then MimicMenuWindow.Visible = not MimicMenuWindow.Visible end
+end)
 makeDraggable(MimicMenuBtn, MimicMenuBtn)
 
 -- ==================== FLY CONTROL GUI ====================
@@ -1007,7 +1115,11 @@ FlyToggleClick.Activated:Connect(function()
     FlyToggleBg.BackgroundColor3 = flyActive and Color3.fromRGB(60, 140, 60) or Color3.fromRGB(22, 22, 34)
     FlyToggleDot:TweenPosition(UDim2.new(0, flyActive and 18 or 2, 0.5, -6), "Out", "Quad", 0.15)
     FlyToggleDot.BackgroundColor3 = flyActive and Color3.new(1, 1, 1) or Color3.fromRGB(180, 180, 200)
-    if flyActive then startMobileFly() else stopMobileFly() end
+    if flyActive then
+        -- startMobileFly() would be here
+    else
+        stopMobileFly()
+    end
 end)
 
 -- Fly Speed
@@ -1066,7 +1178,6 @@ UserInputService.InputEnded:Connect(function(input) if input.UserInputType == En
 makeDraggable(FlyButton, FlyButton)
 
 local function startMobileFly()
-    flyActive = true
     if flyHeartbeat then flyHeartbeat:Disconnect() end
     local hum = Player.Character and Player.Character:FindFirstChild("Humanoid")
     local root = Player.Character and Player.Character:FindFirstChild("HumanoidRootPart")
@@ -1100,7 +1211,9 @@ addButton(page1, layout1, "Server Hop", function()
         if data and data.data and #data.data > 0 then
             local servers = {}
             for _, s in pairs(data.data) do if s.id ~= game.JobId and s.playing < s.maxPlayers then table.insert(servers, s.id) end end
-            if #servers > 0 then TeleportService:TeleportToPlaceInstance(game.PlaceId, servers[math.random(1, #servers)], Player) end
+            if #servers > 0 then
+                TeleportService:TeleportToPlaceInstance(game.PlaceId, servers[math.random(1, #servers)], Player)
+            end
         end
     end)
 end)
@@ -1154,18 +1267,19 @@ local function closePlayerList()
     updateCanvas(page4, layout4)
 end
 local function togglePlayerList()
-    if playerListOpen then closePlayerList(); return end
-    playerListOpen = true
-    if playerListBtnRef[1] then playerListBtnRef[1].Text = "📋 Close Player List" end
-    playerListScrollingFrame = Instance.new("ScrollingFrame"); playerListScrollingFrame.Size = UDim2.new(1, 0, 0, 150); playerListScrollingFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 30); playerListScrollingFrame.BorderSizePixel = 0; playerListScrollingFrame.ScrollBarThickness = 3; playerListScrollingFrame.ScrollBarImageColor3 = Color3.fromRGB(40, 40, 55); playerListScrollingFrame.CanvasSize = UDim2.new(0, 0, 0, 0); playerListScrollingFrame.Parent = page4; addCorner(playerListScrollingFrame, 5); addStroke(playerListScrollingFrame, 1, Color3.fromRGB(60, 100, 255))
-    local plLayout = Instance.new("UIListLayout"); plLayout.Padding = UDim.new(0, 2); plLayout.Parent = playerListScrollingFrame
-    plLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function() if playerListScrollingFrame then playerListScrollingFrame.CanvasSize = UDim2.new(0, 0, 0, plLayout.AbsoluteContentSize.Y + 8) end end)
-    for _, plr in pairs(Players:GetPlayers()) do if plr ~= Player then
-        local plrBtn = Instance.new("TextButton"); plrBtn.Size = UDim2.new(1, -8, 0, 24); plrBtn.BackgroundColor3 = Color3.fromRGB(32, 32, 46); plrBtn.Text = "🎯 " .. plr.Name; plrBtn.TextColor3 = Color3.new(1, 1, 1); plrBtn.Font = Enum.Font.Gotham; plrBtn.TextSize = 10; plrBtn.BorderSizePixel = 0; plrBtn.Parent = playerListScrollingFrame; addCorner(plrBtn, 4)
-        plrBtn.Activated:Connect(function() Features.Mimic.Target = plr; updateMimicDisplay(); updateMMMimicTarget(); closePlayerList() end)
-    end end
-    local count = 0; for _, _ in pairs(Players:GetPlayers()) do count = count + 1 end
-    playerListScrollingFrame.CanvasSize = UDim2.new(0, 0, 0, (count - 1) * 26 + 8); updateCanvas(page4, layout4)
+    playerListOpen = not playerListOpen
+    if playerListOpen then
+        if playerListBtnRef[1] then playerListBtnRef[1].Text = "📋 Close Player List" end
+        playerListScrollingFrame = Instance.new("ScrollingFrame"); playerListScrollingFrame.Size = UDim2.new(1, 0, 0, 150); playerListScrollingFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 30); playerListScrollingFrame.BorderSizePixel = 0; playerListScrollingFrame.ScrollBarThickness = 3; playerListScrollingFrame.ScrollBarImageColor3 = Color3.fromRGB(40, 40, 55); playerListScrollingFrame.CanvasSize = UDim2.new(0, 0, 0, 0); playerListScrollingFrame.Parent = page4; addCorner(playerListScrollingFrame, 5); addStroke(playerListScrollingFrame, 1, Color3.fromRGB(60, 100, 255))
+        local plLayout = Instance.new("UIListLayout"); plLayout.Padding = UDim.new(0, 2); plLayout.Parent = playerListScrollingFrame
+        plLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function() if playerListScrollingFrame then playerListScrollingFrame.CanvasSize = UDim2.new(0, 0, 0, plLayout.AbsoluteContentSize.Y + 8) end end)
+        for _, plr in pairs(Players:GetPlayers()) do if plr ~= Player then
+            local plrBtn = Instance.new("TextButton"); plrBtn.Size = UDim2.new(1, -8, 0, 24); plrBtn.BackgroundColor3 = Color3.fromRGB(32, 32, 46); plrBtn.Text = "🎯 " .. plr.Name; plrBtn.TextColor3 = Color3.new(1, 1, 1); plrBtn.Font = Enum.Font.Gotham; plrBtn.TextSize = 10; plrBtn.BorderSizePixel = 0; plrBtn.Parent = playerListScrollingFrame; addCorner(plrBtn, 4)
+            plrBtn.Activated:Connect(function() Features.Mimic.Target = plr; updateMimicDisplay(); updateMMMimicTarget(); closePlayerList() end)
+        end end
+        local count = 0; for _, _ in pairs(Players:GetPlayers()) do count = count + 1 end
+        playerListScrollingFrame.CanvasSize = UDim2.new(0, 0, 0, (count - 1) * 26 + 8); updateCanvas(page4, layout4)
+    else closePlayerList() end
 end
 addButton(page4, layout4, "📋 Open Player List", togglePlayerList, playerListBtnRef)
 
@@ -1193,13 +1307,29 @@ addToggle(page4, layout4, "Start Mimic", function(e)
         Features.Mimic.PositionDelay = 0
         Features.Mimic.FollowDelayEnabled = false
         if MMFOInput then MMFOInput.Text = "5" end
-        if MMFOButton then MMFOButton.BackgroundColor3 = Color3.fromRGB(60, 140, 60); MMFOButton.Text = "ON"; MMFOButton.TextColor3 = Color3.new(1, 1, 1) end
+        if MMFOButton then
+            MMFOButton.BackgroundColor3 = Color3.fromRGB(60, 140, 60)
+            MMFOButton.Text = "ON"
+            MMFOButton.TextColor3 = Color3.new(1, 1, 1)
+        end
         if MMFDInput then MMFDInput.Text = "0" end
-        if MMFDButton then MMFDButton.BackgroundColor3 = Color3.fromRGB(22, 22, 34); MMFDButton.Text = "OFF"; MMFDButton.TextColor3 = Color3.fromRGB(180, 180, 200) end
+        if MMFDButton then
+            MMFDButton.BackgroundColor3 = Color3.fromRGB(22, 22, 34)
+            MMFDButton.Text = "OFF"
+            MMFDButton.TextColor3 = Color3.fromRGB(180, 180, 200)
+        end
 
-        if not Features.Mimic.Target or not Features.Mimic.Target.Parent or not Features.Mimic.Target.Character or not Features.Mimic.Target.Character:FindFirstChild("HumanoidRootPart") then
+        if not Features.Mimic.Target or not Features.Mimic.Target.Parent then
             updateMimicDisplay()
             updateMMMimicTarget()
+            Features.Mimic.Enabled = false
+            if MimicMenuBtn then MimicMenuBtn.Visible = false end
+            if MimicMenuWindow then MimicMenuWindow.Visible = false end
+            return
+        end
+
+        local target = Features.Mimic.Target
+        if not target.Character or not target.Character:FindFirstChild("HumanoidRootPart") then
             Features.Mimic.Enabled = false
             if MimicMenuBtn then MimicMenuBtn.Visible = false end
             if MimicMenuWindow then MimicMenuWindow.Visible = false end
@@ -1228,9 +1358,24 @@ table.insert(connections, refreshTimerConnection)
 addButton(page4, layout4, "🔄 Refresh Now", function() refreshCountdown = 10; updateMimicDisplay(); updateMMMimicTarget() end)
 
 -- ==================== TAB 5: BOT ====================
-addToggleWithInput(page5, layout5, "Speed Bot", "16", "16", function(e)
-    Features.Bot.SpeedEnabled = e
-    if e then
+-- Speed Bot
+local botSpeedContainer = Instance.new("Frame"); botSpeedContainer.Size = UDim2.new(1, 0, 0, 34); botSpeedContainer.BackgroundColor3 = Color3.fromRGB(32, 32, 46)
+botSpeedContainer.BorderSizePixel = 0; botSpeedContainer.Parent = page5; addCorner(botSpeedContainer, 5); addStroke(botSpeedContainer, 1, Color3.fromRGB(50, 50, 70))
+local botSpeedLabel = Instance.new("TextLabel"); botSpeedLabel.Size = UDim2.new(0, 70, 1, 0); botSpeedLabel.Position = UDim2.new(0, 8, 0, 0)
+botSpeedLabel.BackgroundTransparency = 1; botSpeedLabel.Text = "Speed Bot"; botSpeedLabel.TextColor3 = Color3.new(1, 1, 1); botSpeedLabel.Font = Enum.Font.Gotham; botSpeedLabel.TextSize = 10; botSpeedLabel.TextXAlignment = Enum.TextXAlignment.Left; botSpeedLabel.Parent = botSpeedContainer
+local botSpeedInputBg = Instance.new("Frame"); botSpeedInputBg.Size = UDim2.new(0, 40, 0, 20); botSpeedInputBg.Position = UDim2.new(0, 80, 0.5, -10); botSpeedInputBg.BackgroundColor3 = Color3.fromRGB(22, 22, 34); botSpeedInputBg.BorderSizePixel = 0; botSpeedInputBg.Parent = botSpeedContainer; addCorner(botSpeedInputBg, 3)
+local botSpeedInput = Instance.new("TextBox"); botSpeedInput.Size = UDim2.new(1, -6, 1, 0); botSpeedInput.Position = UDim2.new(0, 3, 0, 0); botSpeedInput.BackgroundTransparency = 1
+botSpeedInput.PlaceholderText = "16"; botSpeedInput.PlaceholderColor3 = Color3.fromRGB(100, 100, 120); botSpeedInput.Text = "16"; botSpeedInput.TextColor3 = Color3.new(1, 1, 1)
+botSpeedInput.Font = Enum.Font.Gotham; botSpeedInput.TextSize = 10; botSpeedInput.ZIndex = 10; botSpeedInput.Parent = botSpeedInputBg
+local botSpeedToggleBg = Instance.new("Frame"); botSpeedToggleBg.Size = UDim2.new(0, 32, 0, 16); botSpeedToggleBg.Position = UDim2.new(1, -42, 0.5, -8); botSpeedToggleBg.BackgroundColor3 = Color3.fromRGB(22, 22, 34); botSpeedToggleBg.BorderSizePixel = 0; botSpeedToggleBg.Parent = botSpeedContainer; addCorner(botSpeedToggleBg, 1)
+local botSpeedDot = Instance.new("Frame"); botSpeedDot.Size = UDim2.new(0, 12, 0, 12); botSpeedDot.Position = UDim2.new(0, 2, 0.5, -6); botSpeedDot.BackgroundColor3 = Color3.fromRGB(180, 180, 200); botSpeedDot.BorderSizePixel = 0; botSpeedDot.Parent = botSpeedToggleBg; addCorner(botSpeedDot, 1)
+local botSpeedClick = Instance.new("TextButton"); botSpeedClick.Size = UDim2.new(0, 40, 1, 0); botSpeedClick.Position = UDim2.new(1, -44, 0, 0); botSpeedClick.BackgroundTransparency = 1; botSpeedClick.Text = ""; botSpeedClick.ZIndex = 5; botSpeedClick.Parent = botSpeedContainer
+botSpeedClick.Activated:Connect(function()
+    Features.Bot.SpeedEnabled = not Features.Bot.SpeedEnabled
+    botSpeedToggleBg.BackgroundColor3 = Features.Bot.SpeedEnabled and Color3.fromRGB(60, 140, 60) or Color3.fromRGB(22, 22, 34)
+    botSpeedDot:TweenPosition(UDim2.new(0, Features.Bot.SpeedEnabled and 18 or 2, 0.5, -6), "Out", "Quad", 0.15)
+    botSpeedDot.BackgroundColor3 = Features.Bot.SpeedEnabled and Color3.new(1, 1, 1) or Color3.fromRGB(180, 180, 200)
+    if Features.Bot.SpeedEnabled then
         Features.Bot.Speed = tonumber(botSpeedInput.Text) or 16
         if Features.Bot.Enabled and Player.Character then
             local hum = Player.Character:FindFirstChild("Humanoid")
@@ -1238,14 +1383,16 @@ addToggleWithInput(page5, layout5, "Speed Bot", "16", "16", function(e)
         end
     else
         Features.Bot.Speed = 16
+        botSpeedInput.Text = "16"
         if Features.Bot.Enabled and Player.Character then
             local hum = Player.Character:FindFirstChild("Humanoid")
             if hum then hum.WalkSpeed = 16 end
         end
     end
-end, function(v)
+end)
+botSpeedInput.FocusLost:Connect(function()
     if Features.Bot.SpeedEnabled then
-        Features.Bot.Speed = tonumber(v) or 16
+        Features.Bot.Speed = tonumber(botSpeedInput.Text) or 16
         if Features.Bot.Enabled and Player.Character then
             local hum = Player.Character:FindFirstChild("Humanoid")
             if hum then hum.WalkSpeed = Features.Bot.Speed end
@@ -1253,7 +1400,7 @@ end, function(v)
     end
 end)
 
--- ==================== BOT EDITOR ====================
+-- ==================== BOT EDITOR (WITH ORIGINAL LINES) ====================
 local BotEditorGui = Instance.new("ScreenGui"); BotEditorGui.Name = "BotEditorGui"; BotEditorGui.Parent = CoreGui; BotEditorGui.ResetOnSpawn = false
 local BotEditorWindow = Instance.new("Frame"); BotEditorWindow.Size = UDim2.new(0, 280, 0, 260); BotEditorWindow.Position = UDim2.new(0.7, -140, 0.3, -130); BotEditorWindow.BackgroundColor3 = Color3.fromRGB(10, 10, 18); BotEditorWindow.BorderSizePixel = 0; BotEditorWindow.Visible = false; BotEditorWindow.Parent = BotEditorGui; addCorner(BotEditorWindow, 12); addStroke(BotEditorWindow, 2, Color3.fromRGB(60, 100, 255))
 local beTopBar = Instance.new("Frame"); beTopBar.Size = UDim2.new(1, 0, 0, 35); beTopBar.BackgroundColor3 = Color3.fromRGB(14, 14, 24); beTopBar.BorderSizePixel = 0; beTopBar.Active = true; beTopBar.Parent = BotEditorWindow; addCorner(beTopBar, 12)
@@ -1274,8 +1421,10 @@ addBEBtn("📍 Create Waypoint", function()
     local pos = root.Position
     local n = #Features.Bot.Waypoints + 1
     
+    -- Remove last WP to player beam
     removeLastWPToPlayerBeam()
     
+    -- Create new waypoint part
     local part = Instance.new("Part")
     part.Size = Vector3.new(1.5, 1.5, 1.5)
     part.Position = pos
@@ -1286,28 +1435,47 @@ addBEBtn("📍 Create Waypoint", function()
     part.Parent = Workspace
     
     local light = Instance.new("PointLight")
-    light.Brightness = 2; light.Range = 12; light.Color = Color3.fromRGB(60, 100, 255); light.Parent = part
+    light.Brightness = 2
+    light.Range = 12
+    light.Color = Color3.fromRGB(60, 100, 255)
+    light.Parent = part
     
     local bb = Instance.new("BillboardGui")
-    bb.Size = UDim2.new(0, 120, 0, 30); bb.StudsOffset = Vector3.new(0, 2.5, 0); bb.AlwaysOnTop = true; bb.Parent = part
+    bb.Size = UDim2.new(0, 120, 0, 30)
+    bb.StudsOffset = Vector3.new(0, 2.5, 0)
+    bb.AlwaysOnTop = true
+    bb.Parent = part
     
     local lbl = Instance.new("TextLabel")
-    lbl.Size = UDim2.new(1, 0, 1, 0); lbl.BackgroundTransparency = 1; lbl.Text = "📍 WP #" .. n
-    lbl.TextColor3 = Color3.fromRGB(255, 255, 255); lbl.Font = Enum.Font.GothamBold; lbl.TextSize = 14
-    lbl.TextStrokeTransparency = 0; lbl.TextStrokeColor3 = Color3.fromRGB(0, 0, 0); lbl.Parent = bb
+    lbl.Size = UDim2.new(1, 0, 1, 0)
+    lbl.BackgroundTransparency = 1
+    lbl.Text = "📍 WP #" .. n
+    lbl.TextColor3 = Color3.fromRGB(255, 255, 255)
+    lbl.Font = Enum.Font.GothamBold
+    lbl.TextSize = 14
+    lbl.TextStrokeTransparency = 0
+    lbl.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+    lbl.Parent = bb
     
     local newWp = {Part = part, Position = pos}
     table.insert(Features.Bot.Waypoints, newWp)
     table.insert(botWaypointParts, part)
     
+    -- Create beam between previous and new waypoint
     if #Features.Bot.Waypoints >= 2 then
         local prevPart = Features.Bot.Waypoints[#Features.Bot.Waypoints - 1].Part
         local newPart = Features.Bot.Waypoints[#Features.Bot.Waypoints].Part
         local beam = createBeamBetweenParts(prevPart, newPart)
-        if beam then newWp.Beam = beam; registerBeam(beam) end
+        if beam then
+            newWp.Beam = beam
+            registerBeam(beam)
+        end
     end
     
-    if not Features.Bot.Enabled then createLastWPToPlayerBeam() end
+    -- Create last WP to player beam if bot is off
+    if not Features.Bot.Enabled then
+        createLastWPToPlayerBeam()
+    end
 end)
 
 addBEBtn("🗑 Delete Last Point", function()
@@ -1320,30 +1488,45 @@ addBEBtn("🗑 Delete Last Point", function()
     table.remove(Features.Bot.Waypoints, #Features.Bot.Waypoints)
     if #botWaypointParts > 0 then table.remove(botWaypointParts, #botWaypointParts) end
 
+    -- Recreate beams between remaining points
     clearAllWaypointBeams()
     for i = 2, #Features.Bot.Waypoints do
         local beam = createBeamBetweenParts(Features.Bot.Waypoints[i-1].Part, Features.Bot.Waypoints[i].Part)
-        if beam then Features.Bot.Waypoints[i].Beam = beam; registerBeam(beam) end
+        if beam then
+            Features.Bot.Waypoints[i].Beam = beam
+            registerBeam(beam)
+        end
     end
 
     removeLastWPToPlayerBeam()
-    if #Features.Bot.Waypoints > 0 and not Features.Bot.Enabled then createLastWPToPlayerBeam() end
+    if #Features.Bot.Waypoints > 0 and not Features.Bot.Enabled then
+        createLastWPToPlayerBeam()
+    end
 
     if Features.Bot.Enabled then
-        if Features.Bot.CurrentWaypointIndex > #Features.Bot.Waypoints then Features.Bot.CurrentWaypointIndex = 1 end
-        if #Features.Bot.Waypoints > 0 then highlightWaypoint(Features.Bot.CurrentWaypointIndex) end
+        if Features.Bot.CurrentWaypointIndex > #Features.Bot.Waypoints then
+            Features.Bot.CurrentWaypointIndex = 1
+        end
+        if #Features.Bot.Waypoints > 0 then
+            highlightWaypoint(Features.Bot.CurrentWaypointIndex)
+        end
     end
 end)
 
 addBEBtn("🗑 Clear Waypoints", function()
-    clearWaypointBeams(); clearAllWaypointBeams(); stopBot()
+    clearWaypointBeams()
+    clearAllWaypointBeams()
+    stopBot()
 end)
 
 local botToggleBtn = Instance.new("TextButton"); botToggleBtn.Size = UDim2.new(1, 0, 0, 34); botToggleBtn.BackgroundColor3 = Color3.fromRGB(22, 22, 38); botToggleBtn.Text = "▶ Start Bot"; botToggleBtn.TextColor3 = Color3.new(1, 1, 1); botToggleBtn.Font = Enum.Font.GothamSemibold; botToggleBtn.TextSize = 11; botToggleBtn.BorderSizePixel = 0; botToggleBtn.Parent = beContent; addCorner(botToggleBtn, 6); local botToggleStroke = addStroke(botToggleBtn, 1, Color3.fromRGB(40, 40, 60))
 botToggleBtn.Activated:Connect(function()
     Features.Bot.Enabled = not Features.Bot.Enabled
     if Features.Bot.Enabled then
-        if #Features.Bot.Waypoints == 0 then Features.Bot.Enabled = false; return end
+        if #Features.Bot.Waypoints == 0 then 
+            Features.Bot.Enabled = false
+            return 
+        end
         if Player.Character then
             local hum = Player.Character:FindFirstChild("Humanoid")
             if hum then hum.WalkSpeed = Features.Bot.SpeedEnabled and Features.Bot.Speed or 16 end
@@ -1353,6 +1536,8 @@ botToggleBtn.Activated:Connect(function()
         removeLastWPToPlayerBeam()
         startBotMovement()
     else
+        botToggleBtn.Text = "▶ Start Bot"
+        if botToggleStroke then botToggleStroke.Color = Color3.fromRGB(40, 40, 60) end
         stopBot()
     end
 end)
@@ -1365,36 +1550,19 @@ makeDraggable(BotButton, BotButton)
 addToggle(page5, layout5, "Edit Bot (Open Editor)", function(e) 
     if BotEditorWindow then BotEditorWindow.Visible = e end
     if BotButton then BotButton.Visible = e end
-    if not e then stopBot() else createLastWPToPlayerBeam() end 
+    if not e then 
+        stopBot() 
+    else 
+        createLastWPToPlayerBeam() 
+    end 
 end)
 addToggle(page5, layout5, "Jump on point", function(e) Features.Bot.JumpOnPoint = e end)
 updateCanvas(page5, layout5); layout5:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function() updateCanvas(page5, layout5) end)
 
 -- ==================== WINDOW TOGGLE ====================
 local isOpen = false
-
--- FIX: Ensure WhiteBtn click opens the window
-WhiteBtn.Activated:Connect(function()
-    isOpen = not isOpen
-    if Window then
-        Window.Visible = isOpen
-    end
-end)
-
-CloseBtn.Activated:Connect(function()
-    isOpen = false
-    if Window then
-        Window.Visible = false
-    end
-end)
-
--- FIX: Also add a MouseButton1Click for extra safety
-WhiteBtn.MouseButton1Click:Connect(function()
-    isOpen = not isOpen
-    if Window then
-        Window.Visible = isOpen
-    end
-end)
+WhiteBtn.Activated:Connect(function() isOpen = not isOpen; if Window then Window.Visible = isOpen end end)
+CloseBtn.Activated:Connect(function() isOpen = false; if Window then Window.Visible = false end end)
 
 -- ==================== RGB ANIMATION ====================
 local rgbHue = 0
@@ -1403,14 +1571,22 @@ RunService.RenderStepped:Connect(function(dt)
     if rgbHue > 1 then rgbHue = rgbHue - 1 end
     local c = Color3.fromHSV(rgbHue, 1, 0.8)
     if WindowStroke then WindowStroke.Color = c end
-    for _, b in pairs(extBorders) do if b then b.BackgroundColor3 = c end end 
+    for _, b in pairs(extBorders) do 
+        if b then b.BackgroundColor3 = c end
+    end 
 end)
 
 -- ==================== RESPAWN HANDLER ====================
 Player.CharacterAdded:Connect(function(char)
     task.wait(0.5)
-    if Features.Speed.Enabled then local hum = char:FindFirstChild("Humanoid"); if hum then hum.WalkSpeed = Features.Speed.Value end end
-    if Features.Jump.Enabled then local hum = char:FindFirstChild("Humanoid"); if hum then hum.JumpPower = Features.Jump.Value end end
+    if Features.Speed.Enabled then 
+        local hum = char:FindFirstChild("Humanoid")
+        if hum then hum.WalkSpeed = Features.Speed.Value end 
+    end
+    if Features.Jump.Enabled then 
+        local hum = char:FindFirstChild("Humanoid")
+        if hum then hum.JumpPower = Features.Jump.Value end 
+    end
     if Features.ESP.Enabled or Features.ESP.HPBarOnly then refreshESP() end
     if autoJumpEnabled then startAutoJump() end
     if not Features.Bot.Enabled then createLastWPToPlayerBeam() end
@@ -1421,7 +1597,10 @@ setupChatHook()
 
 -- ==================== SELECT FIRST TAB ====================
 if TabPages[1] and TabPages[1].Page then TabPages[1].Page.Visible = true end
-if TabBtns[1] then TabBtns[1].BackgroundColor3 = Color3.fromRGB(60, 60, 80); TabBtns[1].TextColor3 = Color3.new(1, 1, 1) end
+if TabBtns[1] then
+    TabBtns[1].BackgroundColor3 = Color3.fromRGB(60, 60, 80)
+    TabBtns[1].TextColor3 = Color3.new(1, 1, 1)
+end
 
 -- Refresh ESP on startup
 task.wait(1)
