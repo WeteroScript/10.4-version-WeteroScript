@@ -1,7 +1,7 @@
 --[[
-    WeteroScript v11.03 FINAL FIXED v13
+    WeteroScript v11.02 FINAL FIXED v10
     Author: @WeteroScript
-    FIXED: MouseButton1Click removed, Activated only for mobile
+    FIX: All bugs + duplicate functions + nil checks + cleanup
 ]]
 
 -- ==================== SERVICES ====================
@@ -13,12 +13,10 @@ local Player = Players.LocalPlayer
 local TeleportService = game:GetService("TeleportService")
 local Workspace = game:GetService("Workspace")
 local HttpService = game:GetService("HttpService")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local TextChatService = game:GetService("TextChatService")
 
 -- ==================== CLEANUP ====================
 pcall(function()
-    for _, name in ipairs({"WeteroScript", "WeteroButton", "AdGui", "BotEditorGui", "ColorPickerGui", "MimicMenuGui", "MimicMenuBtn", "FlyGui", "BotButtonGui", "FlyControlGui", "ChatGui"}) do
+    for _, name in ipairs({"WeteroScript", "WeteroButton", "AdGui", "BotEditorGui", "ColorPickerGui", "MimicMenuGui", "MimicMenuBtn", "FlyGui", "BotButtonGui", "FlyControlGui"}) do
         local inst = CoreGui:FindFirstChild(name)
         if inst then inst:Destroy() end
     end
@@ -91,7 +89,7 @@ local AdGui = Instance.new("ScreenGui"); AdGui.Name = "AdGui"; AdGui.Parent = Co
 local AdFrame = Instance.new("Frame"); AdFrame.Size = UDim2.new(0, 300, 0, 120); AdFrame.Position = UDim2.new(0.5, -150, 0.5, -60)
 AdFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25); AdFrame.BorderSizePixel = 0; AdFrame.Parent = AdGui; addCorner(AdFrame, 8)
 local AdTitle = Instance.new("TextLabel"); AdTitle.Size = UDim2.new(1, 0, 0, 25); AdTitle.Position = UDim2.new(0, 0, 0, 10)
-AdTitle.BackgroundTransparency = 1; AdTitle.Text = "WeteroScript v11.03"; AdTitle.TextColor3 = Color3.new(1, 1, 1)
+AdTitle.BackgroundTransparency = 1; AdTitle.Text = "WeteroScript v11.02"; AdTitle.TextColor3 = Color3.new(1, 1, 1)
 AdTitle.Font = Enum.Font.GothamBold; AdTitle.TextSize = 18; AdTitle.Parent = AdFrame
 local AdTG = Instance.new("TextLabel"); AdTG.Size = UDim2.new(1, 0, 0, 20); AdTG.Position = UDim2.new(0, 0, 0, 40)
 AdTG.BackgroundTransparency = 1; AdTG.Text = "t.me/WeteroScript"; AdTG.TextColor3 = Color3.fromRGB(100, 180, 255)
@@ -118,7 +116,7 @@ makeDraggable(BtnContainer, WhiteBtn)
 
 -- ==================== MAIN GUI WINDOW ====================
 local Gui = Instance.new("ScreenGui"); Gui.Name = "WeteroScript"; Gui.Parent = CoreGui; Gui.ResetOnSpawn = false
-local Window = Instance.new("Frame"); Window.Size = UDim2.new(0, 620, 0, 500); Window.Position = UDim2.new(0.5, -310, 0.5, -250)
+local Window = Instance.new("Frame"); Window.Size = UDim2.new(0, 520, 0, 420); Window.Position = UDim2.new(0.5, -260, 0.5, -210)
 Window.BackgroundColor3 = Color3.fromRGB(12, 12, 18); Window.BorderSizePixel = 0; Window.Visible = false; Window.Parent = Gui; addCorner(Window, 10)
 local WindowStroke = addStroke(Window, 2, Color3.new(1, 1, 1))
 local TopBar = Instance.new("Frame"); TopBar.Size = UDim2.new(1, 0, 0, 35); TopBar.BackgroundColor3 = Color3.fromRGB(18, 18, 26)
@@ -126,7 +124,7 @@ TopBar.BorderSizePixel = 0; TopBar.Active = true; TopBar.Parent = Window; addCor
 local TopBarCover = Instance.new("Frame"); TopBarCover.Size = UDim2.new(1, 0, 0.5, 0); TopBarCover.Position = UDim2.new(0, 0, 0.5, 0)
 TopBarCover.BackgroundColor3 = Color3.fromRGB(18, 18, 26); TopBarCover.BorderSizePixel = 0; TopBarCover.Parent = TopBar
 local Title = Instance.new("TextLabel"); Title.Size = UDim2.new(1, -40, 1, 0); Title.Position = UDim2.new(0, 12, 0, 0)
-Title.BackgroundTransparency = 1; Title.Text = "⚡ WeteroScript v11.03"; Title.TextColor3 = Color3.fromRGB(200, 200, 255)
+Title.BackgroundTransparency = 1; Title.Text = "⚡ WeteroScript v11.02"; Title.TextColor3 = Color3.fromRGB(200, 200, 255)
 Title.Font = Enum.Font.GothamBold; Title.TextSize = 13; Title.TextXAlignment = Enum.TextXAlignment.Left; Title.Parent = TopBar
 local CloseBtn = Instance.new("TextButton"); CloseBtn.Size = UDim2.new(0, 28, 0, 28); CloseBtn.Position = UDim2.new(1, -32, 0, 3)
 CloseBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 60); CloseBtn.Text = "✕"; CloseBtn.TextColor3 = Color3.new(1, 1, 1)
@@ -143,7 +141,7 @@ ScrollLeftBtn.Font = Enum.Font.GothamBold; ScrollLeftBtn.TextSize = 10; ScrollLe
 local ScrollRightBtn = Instance.new("TextButton"); ScrollRightBtn.Size = UDim2.new(0, 18, 0, 30); ScrollRightBtn.Position = UDim2.new(1, -18, 0, 3)
 ScrollRightBtn.BackgroundColor3 = Color3.fromRGB(25, 25, 38); ScrollRightBtn.Text = "▶"; ScrollRightBtn.TextColor3 = Color3.new(1, 1, 1)
 ScrollRightBtn.Font = Enum.Font.GothamBold; ScrollRightBtn.TextSize = 10; ScrollRightBtn.BorderSizePixel = 0; ScrollRightBtn.Parent = Window; addCorner(ScrollRightBtn, 4)
-local tabScrollOffset = 0; local maxTabScroll = 0; local TAB_W = 80; local TAB_GAP = 3; local TabBtns = {}; local TabPages = {}
+local tabScrollOffset = 0; local maxTabScroll = 0; local TAB_W = 96; local TAB_GAP = 3; local TabBtns = {}; local TabPages = {}
 local function updateTabScroll()
     TabScrollFrame.Position = UDim2.new(0, -tabScrollOffset, 0, 0); ScrollLeftBtn.Visible = tabScrollOffset > 0; ScrollRightBtn.Visible = tabScrollOffset < maxTabScroll
 end
@@ -218,10 +216,9 @@ end
 -- ==================== CREATE TABS ====================
 local page1, layout1 = createTab("Move", 1)
 local page2, layout2 = createTab("ESP", 2)
-local page3, layout3 = createTab("Diff", 3)
+local page3, layout3 = createTab("Different", 3)
 local page4, layout4 = createTab("Mimic", 4)
 local page5, layout5 = createTab("Bot", 5)
-local page6, layout6 = createTab("Chat", 6)
 
 -- ==================== FEATURES STATE ====================
 local Features = {
@@ -236,292 +233,6 @@ local Features = {
 local connections = {}; local espStorage = {}; local mimicConnections = {}; local botConnections = {}; local botWaypointParts = {}
 local lastWPToPlayerBeam = nil; local allBeams = {}
 local flyActive = false; local flyHeartbeat
-
--- ==================== BEAM FUNCTIONS (ORIGINAL BOT EDITOR LINES) ====================
-local function registerBeam(beam)
-    table.insert(allBeams, beam)
-end
-
-local function destroyBeam(beam)
-    if beam and beam.Parent then beam:Destroy() end
-    for i, b in pairs(allBeams) do if b == beam then allBeams[i] = nil; break end end
-end
-
-local function createBeamBetweenParts(partA, partB)
-    if not partA or not partB then return nil end
-    if not partA.Parent or not partB.Parent then return nil end
-    
-    for _, child in pairs(partA:GetChildren()) do
-        if child:IsA("Attachment") and child.Name == "BeamAtt" then child:Destroy() end
-    end
-    for _, child in pairs(partB:GetChildren()) do
-        if child:IsA("Attachment") and child.Name == "BeamAtt" then child:Destroy() end
-    end
-    
-    local att1 = Instance.new("Attachment")
-    att1.Name = "BeamAtt"
-    att1.Parent = partA
-    
-    local att2 = Instance.new("Attachment")
-    att2.Name = "BeamAtt"
-    att2.Parent = partB
-    
-    local beam = Instance.new("Beam")
-    beam.Attachment0 = att1
-    beam.Attachment1 = att2
-    beam.Width0 = 0.3
-    beam.Width1 = 0.3
-    beam.Color = ColorSequence.new(Color3.fromRGB(0, 200, 255))
-    beam.Transparency = NumberSequence.new(0.2)
-    beam.Parent = partA
-    
-    return beam
-end
-
-local function createLastWPToPlayerBeam()
-    if not Player.Character then return end
-    removeLastWPToPlayerBeam()
-    if #Features.Bot.Waypoints == 0 then return end
-    local root = Player.Character:FindFirstChild("HumanoidRootPart")
-    if not root then return end
-    local lastWp = Features.Bot.Waypoints[#Features.Bot.Waypoints]
-    if not lastWp or not lastWp.Part or not lastWp.Part.Parent then return end
-    
-    for _, child in pairs(lastWp.Part:GetChildren()) do
-        if child:IsA("Attachment") and child.Name == "PlayerBeamAtt" then child:Destroy() end
-    end
-    for _, child in pairs(root:GetChildren()) do
-        if child:IsA("Attachment") and child.Name == "PlayerBeamAtt" then child:Destroy() end
-    end
-    
-    local attWp = Instance.new("Attachment")
-    attWp.Name = "PlayerBeamAtt"
-    attWp.Parent = lastWp.Part
-    local attPlayer = Instance.new("Attachment")
-    attPlayer.Name = "PlayerBeamAtt"
-    attPlayer.Parent = root
-    
-    local beam = Instance.new("Beam")
-    beam.Attachment0 = attWp
-    beam.Attachment1 = attPlayer
-    beam.Width0 = 0.2
-    beam.Width1 = 0.2
-    beam.Color = ColorSequence.new(Color3.fromRGB(255, 100, 0))
-    beam.Transparency = NumberSequence.new(0.3)
-    beam.Parent = lastWp.Part
-    lastWPToPlayerBeam = beam
-    registerBeam(beam)
-end
-
-local function removeLastWPToPlayerBeam()
-    if lastWPToPlayerBeam and lastWPToPlayerBeam.Parent then
-        destroyBeam(lastWPToPlayerBeam)
-    end
-    lastWPToPlayerBeam = nil
-end
-
-local function clearAllWaypointBeams()
-    for _, wp in pairs(Features.Bot.Waypoints) do
-        if wp.Part then
-            for _, child in pairs(wp.Part:GetChildren()) do
-                if child:IsA("Attachment") then child:Destroy() end
-                if child:IsA("Beam") then child:Destroy() end
-            end
-        end
-    end
-end
-
--- ==================== CHAT SYSTEM ====================
-local chatMessages = {}
-local chatScrollingFrame = nil
-local chatMessageBox = nil
-local chatSendButton = nil
-
-local function addChatMessage(speaker, message)
-    local timestamp = DateTime.now():FormatLocalTime("HH:mm:ss")
-    local formatted = string.format("[%s] %s: %s", timestamp, speaker, message)
-    table.insert(chatMessages, formatted)
-    
-    if #chatMessages > 100 then
-        table.remove(chatMessages, 1)
-    end
-    
-    if chatScrollingFrame and chatScrollingFrame.Parent then
-        -- Clear old messages
-        for _, child in pairs(chatScrollingFrame:GetChildren()) do
-            if child:IsA("TextLabel") then
-                child:Destroy()
-            end
-        end
-        
-        -- Rebuild messages (newest at bottom)
-        local yOffset = 0
-        for i = #chatMessages, 1, -1 do
-            local msg = chatMessages[i]
-            local lbl = Instance.new("TextLabel")
-            lbl.Size = UDim2.new(1, -10, 0, 20)
-            lbl.Position = UDim2.new(0, 5, 0, yOffset)
-            lbl.BackgroundTransparency = 1
-            lbl.Text = msg
-            lbl.TextColor3 = Color3.fromRGB(200, 200, 200)
-            lbl.Font = Enum.Font.Gotham
-            lbl.TextSize = 11
-            lbl.TextXAlignment = Enum.TextXAlignment.Left
-            lbl.TextWrapped = true
-            lbl.Parent = chatScrollingFrame
-            yOffset = yOffset + 22
-        end
-        
-        chatScrollingFrame.CanvasSize = UDim2.new(0, 0, 0, yOffset + 10)
-        chatScrollingFrame.CanvasPosition = Vector2.new(0, yOffset)
-    end
-end
-
-local function sendChatMessage(message)
-    if message == "" or message == nil then return end
-    
-    local success = pcall(function()
-        -- Try new TextChatService
-        local textChannels = TextChatService:FindFirstChild("TextChannels")
-        if textChannels then
-            local rbxlGeneral = textChannels:FindFirstChild("RBXGeneral")
-            if rbxlGeneral then
-                rbxlGeneral:SendAsync(message)
-                return
-            end
-        end
-        
-        -- Try old RemoteEvent
-        local chatEvents = ReplicatedStorage:FindFirstChild("DefaultChatSystemChatEvents")
-        if chatEvents then
-            local sayMessageRequest = chatEvents:FindFirstChild("SayMessageRequest")
-            if sayMessageRequest then
-                sayMessageRequest:FireServer(message, "All")
-                return
-            end
-        end
-        
-        -- Another fallback
-        local chat = ReplicatedStorage:FindFirstChild("Chat")
-        if chat then
-            local remote = chat:FindFirstChild("SendMessage")
-            if remote then
-                remote:FireServer(message)
-                return
-            end
-        end
-    end)
-    
-    if not success then
-        warn("Failed to send message")
-    end
-end
-
--- Hook into chat to receive messages
-local function setupChatHook()
-    -- New TextChatService
-    local success, conn = pcall(function()
-        return TextChatService.MessageReceived:Connect(function(message)
-            if message and message.Text then
-                local speaker = message.TextSource and message.TextSource.Name or "Unknown"
-                addChatMessage(speaker, message.Text)
-            end
-        end)
-    end
-    if success and conn then
-        table.insert(connections, conn)
-    end
-    
-    -- Old chat system
-    local chatEvents = ReplicatedStorage:FindFirstChild("DefaultChatSystemChatEvents")
-    if chatEvents then
-        local onMessageDone = chatEvents:FindFirstChild("OnMessageDoneFiltering")
-        if onMessageDone and onMessageDone.OnClientEvent then
-            local conn = onMessageDone.OnClientEvent:Connect(function(messageData)
-                if messageData and messageData.Author and messageData.Message then
-                    addChatMessage(messageData.Author, messageData.Message)
-                end
-            end)
-            table.insert(connections, conn)
-        end
-    end
-end
-
--- ==================== BUILD CHAT TAB ====================
-local chatContainer = Instance.new("Frame")
-chatContainer.Size = UDim2.new(1, 0, 1, 0)
-chatContainer.BackgroundTransparency = 1
-chatContainer.Parent = page6
-
--- Chat display ScrollingFrame
-chatScrollingFrame = Instance.new("ScrollingFrame")
-chatScrollingFrame.Size = UDim2.new(1, -10, 1, -50)
-chatScrollingFrame.Position = UDim2.new(0, 5, 0, 5)
-chatScrollingFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
-chatScrollingFrame.BorderSizePixel = 0
-chatScrollingFrame.ScrollBarThickness = 5
-chatScrollingFrame.ScrollBarImageColor3 = Color3.fromRGB(60, 100, 255)
-chatScrollingFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
-chatScrollingFrame.Parent = chatContainer
-addCorner(chatScrollingFrame, 6)
-addStroke(chatScrollingFrame, 1, Color3.fromRGB(60, 100, 255))
-
--- Input frame
-local inputFrame = Instance.new("Frame")
-inputFrame.Size = UDim2.new(1, -10, 0, 35)
-inputFrame.Position = UDim2.new(0, 5, 1, -40)
-inputFrame.BackgroundTransparency = 1
-inputFrame.Parent = chatContainer
-
--- TextBox for message
-chatMessageBox = Instance.new("TextBox")
-chatMessageBox.Size = UDim2.new(1, -90, 1, 0)
-chatMessageBox.Position = UDim2.new(0, 0, 0, 0)
-chatMessageBox.BackgroundColor3 = Color3.fromRGB(32, 32, 46)
-chatMessageBox.PlaceholderText = "Type message here..."
-chatMessageBox.PlaceholderColor3 = Color3.fromRGB(120, 120, 140)
-chatMessageBox.Text = ""
-chatMessageBox.TextColor3 = Color3.new(1, 1, 1)
-chatMessageBox.Font = Enum.Font.Gotham
-chatMessageBox.TextSize = 12
-chatMessageBox.BorderSizePixel = 0
-chatMessageBox.Parent = inputFrame
-addCorner(chatMessageBox, 5)
-addStroke(chatMessageBox, 1, Color3.fromRGB(60, 100, 255))
-
--- Send button
-chatSendButton = Instance.new("TextButton")
-chatSendButton.Size = UDim2.new(0, 80, 1, 0)
-chatSendButton.Position = UDim2.new(1, -85, 0, 0)
-chatSendButton.BackgroundColor3 = Color3.fromRGB(60, 100, 255)
-chatSendButton.Text = "SEND"
-chatSendButton.TextColor3 = Color3.new(1, 1, 1)
-chatSendButton.Font = Enum.Font.GothamBold
-chatSendButton.TextSize = 12
-chatSendButton.BorderSizePixel = 0
-chatSendButton.Parent = inputFrame
-addCorner(chatSendButton, 5)
-
-chatSendButton.Activated:Connect(function()
-    local msg = chatMessageBox.Text
-    if msg ~= "" then
-        sendChatMessage(msg)
-        chatMessageBox.Text = ""
-    end
-end)
-
-chatMessageBox.FocusLost:Connect(function(enterPressed)
-    if enterPressed then
-        local msg = chatMessageBox.Text
-        if msg ~= "" then
-            sendChatMessage(msg)
-            chatMessageBox.Text = ""
-        end
-    end
-end)
-
--- Add test message
-addChatMessage("System", "Chat tab loaded. Messages will appear here.")
 
 -- ==================== CLEANUP FUNCTIONS ====================
 local function resetAllHitboxes()
@@ -559,6 +270,41 @@ local function resetWaypointColors()
     end
 end
 
+local function registerBeam(beam)
+    table.insert(allBeams, beam)
+end
+
+local function destroyBeam(beam)
+    if beam and beam.Parent then beam:Destroy() end
+    for i, b in pairs(allBeams) do if b == beam then allBeams[i] = nil; break end end
+end
+
+local function removeLastWPToPlayerBeam()
+    if lastWPToPlayerBeam and lastWPToPlayerBeam.Parent then
+        destroyBeam(lastWPToPlayerBeam)
+    end
+    lastWPToPlayerBeam = nil
+end
+
+local function createLastWPToPlayerBeam()
+    if not Player.Character then return end
+    removeLastWPToPlayerBeam()
+    if #Features.Bot.Waypoints == 0 then return end
+    local root = Player.Character:FindFirstChild("HumanoidRootPart")
+    if not root then return end
+    local lastWp = Features.Bot.Waypoints[#Features.Bot.Waypoints]
+    if not lastWp or not lastWp.Part or not lastWp.Part.Parent then return end
+    local beam = Instance.new("Beam")
+    beam.Attachment0 = Instance.new("Attachment"); beam.Attachment0.Parent = lastWp.Part
+    beam.Attachment1 = Instance.new("Attachment"); beam.Attachment1.Parent = root
+    beam.Width0 = 0.2; beam.Width1 = 0.2
+    beam.Color = ColorSequence.new(Color3.fromRGB(60, 100, 255))
+    beam.Transparency = NumberSequence.new(0.3)
+    beam.Parent = lastWp.Part
+    lastWPToPlayerBeam = beam
+    registerBeam(beam)
+end
+
 local function stopBot()
     Features.Bot.Enabled = false; Features.Bot.CurrentWaypointIndex = 0
     if botConnections.Walk then botConnections.Walk:Disconnect(); botConnections.Walk = nil end
@@ -573,6 +319,7 @@ end
 local function clearWaypointBeams()
     removeLastWPToPlayerBeam()
     for _, wp in pairs(Features.Bot.Waypoints) do
+        if wp.Beam then destroyBeam(wp.Beam) end
         if wp.Part and wp.Part.Parent then wp.Part:Destroy() end
     end
     for i, b in pairs(allBeams) do if b and b.Parent then b:Destroy() end end
@@ -588,6 +335,9 @@ local function stopMobileFly()
     pcall(function() if FlyGui then FlyGui.Enabled = false end end)
     pcall(function() if FlyButton then FlyButton.Visible = false end end)
     pcall(function() if DPad then DPad.Visible = false end end)
+    pcall(function() if FlyToggleBg then FlyToggleBg.BackgroundColor3 = Color3.fromRGB(22, 22, 34) end end)
+    pcall(function() if FlyToggleDot then FlyToggleDot.Position = UDim2.new(0, 2, 0.5, -6) end end)
+    pcall(function() if FlyToggleDot then FlyToggleDot.BackgroundColor3 = Color3.fromRGB(180, 180, 200) end end)
     if Player.Character then local hum = Player.Character:FindFirstChild("Humanoid"); if hum then hum.PlatformStand = false end end
 end
 
@@ -604,169 +354,39 @@ local function stopAllFunctions()
     pcall(function() if MimicMenuGui then MimicMenuGui:Destroy() end end); pcall(function() if MimicMenuBtnGui then MimicMenuBtnGui:Destroy() end end); pcall(function() if FlyGui then FlyGui:Destroy() end end); pcall(function() if BotButtonGui then BotButtonGui:Destroy() end end)
     pcall(function() if FlyControlGui then FlyControlGui:Destroy() end end)
     clearWaypointBeams()
-    clearAllWaypointBeams()
     for i = 1, #rainbowStrokes do rainbowStrokes[i] = nil end
 end
 
--- ==================== ESP FUNCTIONS (FIXED FOR NEW PLAYERS) ====================
+-- ==================== ESP FUNCTIONS ====================
 local function refreshESP()
-    for _, data in pairs(espStorage) do 
-        if data.Highlight then data.Highlight:Destroy() end
-        if data.Billboard then data.Billboard:Destroy() end
-        if data.HPConnection then data.HPConnection:Disconnect() end
-    end
+    for _, data in pairs(espStorage) do if data.Highlight then data.Highlight:Destroy() end; if data.Billboard then data.Billboard:Destroy() end; if data.HPConnection then data.HPConnection:Disconnect() end end
     espStorage = {}
-    
     local function addHPBarOnly(char)
-        if espStorage[char] then return end
-        espStorage[char] = {}
-        local hum = char:FindFirstChild("Humanoid")
-        if hum then
-            local bb = Instance.new("BillboardGui")
-            bb.StudsOffset = Vector3.new(0, 3, 0)
-            bb.AlwaysOnTop = true
-            bb.Size = UDim2.new(0, 55, 0, 12)
-            bb.Parent = char
-            local nl = Instance.new("TextLabel")
-            nl.Size = UDim2.new(1, 0, 0, 7)
-            nl.BackgroundTransparency = 1
-            nl.Text = char.Name
-            nl.TextColor3 = Color3.new(1, 1, 1)
-            nl.Font = Enum.Font.Gotham
-            nl.TextSize = 7
-            nl.Parent = bb
-            local bg = Instance.new("Frame")
-            bg.Size = UDim2.new(1, 0, 0, 3)
-            bg.Position = UDim2.new(0, 0, 0, 8)
-            bg.BackgroundColor3 = Color3.new(0, 0, 0)
-            bg.BorderSizePixel = 0
-            bg.Parent = bb
-            local bar = Instance.new("Frame")
-            bar.Size = UDim2.new(hum.Health / hum.MaxHealth, 0, 1, 0)
-            bar.BackgroundColor3 = Color3.new(0, 1, 0)
-            bar.BorderSizePixel = 0
-            bar.Parent = bg
-            espStorage[char].Billboard = bb
-            espStorage[char].HPConnection = hum:GetPropertyChangedSignal("Health"):Connect(function()
-                if bar and bar.Parent then
-                    bar.Size = UDim2.new(hum.Health / hum.MaxHealth, 0, 1, 0)
-                end
-            end)
+        if espStorage[char] then return end; espStorage[char] = {}
+        local hum = char:FindFirstChild("Humanoid"); if hum then
+            local bb = Instance.new("BillboardGui"); bb.StudsOffset = Vector3.new(0, 3, 0); bb.AlwaysOnTop = true; bb.Size = UDim2.new(0, 55, 0, 12); bb.Parent = char
+            local nl = Instance.new("TextLabel"); nl.Size = UDim2.new(1, 0, 0, 7); nl.BackgroundTransparency = 1; nl.Text = char.Name; nl.TextColor3 = Color3.new(1, 1, 1); nl.Font = Enum.Font.Gotham; nl.TextSize = 7; nl.Parent = bb
+            local bg = Instance.new("Frame"); bg.Size = UDim2.new(1, 0, 0, 3); bg.Position = UDim2.new(0, 0, 0, 8); bg.BackgroundColor3 = Color3.new(0, 0, 0); bg.BorderSizePixel = 0; bg.Parent = bb
+            local bar = Instance.new("Frame"); bar.Size = UDim2.new(hum.Health / hum.MaxHealth, 0, 1, 0); bar.BackgroundColor3 = Color3.new(0, 1, 0); bar.BorderSizePixel = 0; bar.Parent = bg
+            espStorage[char].Billboard = bb; espStorage[char].HPConnection = hum:GetPropertyChangedSignal("Health"):Connect(function() if bar and bar.Parent then bar.Size = UDim2.new(hum.Health / hum.MaxHealth, 0, 1, 0) end end)
         end
     end
-    
     local function addFullESP(char)
         if espStorage[char] then return end
-        local hl = Instance.new("Highlight")
-        hl.FillTransparency = 0.85
-        hl.OutlineColor = Features.ESP.Color
-        hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-        hl.Parent = char
-        espStorage[char] = {Highlight = hl}
+        local hl = Instance.new("Highlight"); hl.FillTransparency = 0.85; hl.OutlineColor = Features.ESP.Color; hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop; hl.Parent = char; espStorage[char] = {Highlight = hl}
         if Features.ESP.HPBar then
-            local hum = char:FindFirstChild("Humanoid")
-            if hum then
-                local bb = Instance.new("BillboardGui")
-                bb.StudsOffset = Vector3.new(0, 3, 0)
-                bb.AlwaysOnTop = true
-                bb.Size = UDim2.new(0, 55, 0, 12)
-                bb.Parent = char
-                local nl = Instance.new("TextLabel")
-                nl.Size = UDim2.new(1, 0, 0, 7)
-                nl.BackgroundTransparency = 1
-                nl.Text = char.Name
-                nl.TextColor3 = Color3.new(1, 1, 1)
-                nl.Font = Enum.Font.Gotham
-                nl.TextSize = 7
-                nl.Parent = bb
-                local bg = Instance.new("Frame")
-                bg.Size = UDim2.new(1, 0, 0, 3)
-                bg.Position = UDim2.new(0, 0, 0, 8)
-                bg.BackgroundColor3 = Color3.new(0, 0, 0)
-                bg.BorderSizePixel = 0
-                bg.Parent = bb
-                local bar = Instance.new("Frame")
-                bar.Size = UDim2.new(hum.Health / hum.MaxHealth, 0, 1, 0)
-                bar.BackgroundColor3 = Color3.new(0, 1, 0)
-                bar.BorderSizePixel = 0
-                bar.Parent = bg
-                espStorage[char].Billboard = bb
-                espStorage[char].HPConnection = hum:GetPropertyChangedSignal("Health"):Connect(function()
-                    if bar and bar.Parent then
-                        bar.Size = UDim2.new(hum.Health / hum.MaxHealth, 0, 1, 0)
-                    end
-                end)
+            local hum = char:FindFirstChild("Humanoid"); if hum then
+                local bb = Instance.new("BillboardGui"); bb.StudsOffset = Vector3.new(0, 3, 0); bb.AlwaysOnTop = true; bb.Size = UDim2.new(0, 55, 0, 12); bb.Parent = char
+                local nl = Instance.new("TextLabel"); nl.Size = UDim2.new(1, 0, 0, 7); nl.BackgroundTransparency = 1; nl.Text = char.Name; nl.TextColor3 = Color3.new(1, 1, 1); nl.Font = Enum.Font.Gotham; nl.TextSize = 7; nl.Parent = bb
+                local bg = Instance.new("Frame"); bg.Size = UDim2.new(1, 0, 0, 3); bg.Position = UDim2.new(0, 0, 0, 8); bg.BackgroundColor3 = Color3.new(0, 0, 0); bg.BorderSizePixel = 0; bg.Parent = bb
+                local bar = Instance.new("Frame"); bar.Size = UDim2.new(hum.Health / hum.MaxHealth, 0, 1, 0); bar.BackgroundColor3 = Color3.new(0, 1, 0); bar.BorderSizePixel = 0; bar.Parent = bg
+                espStorage[char].Billboard = bb; espStorage[char].HPConnection = hum:GetPropertyChangedSignal("Health"):Connect(function() if bar and bar.Parent then bar.Size = UDim2.new(hum.Health / hum.MaxHealth, 0, 1, 0) end end)
             end
         end
     end
-    
-    -- Apply to existing players
-    for _, plr in pairs(Players:GetPlayers()) do
-        if plr ~= Player and plr.Character then
-            if Features.ESP.HPBarOnly and not Features.ESP.Enabled then
-                addHPBarOnly(plr.Character)
-            elseif Features.ESP.Enabled then
-                addFullESP(plr.Character)
-            end
-        end
-    end
-    
-    -- Listen for new players
-    if connections.PlayerAdded then connections.PlayerAdded:Disconnect() end
-    connections.PlayerAdded = Players.PlayerAdded:Connect(function(plr)
-        if plr == Player then return end
-        
-        -- When new player joins, add ESP to their character when it appears
-        local function onCharAdded(char)
-            task.wait(0.5)
-            if char and char.Parent then
-                if Features.ESP.HPBarOnly and not Features.ESP.Enabled then
-                    addHPBarOnly(char)
-                elseif Features.ESP.Enabled then
-                    addFullESP(char)
-                end
-            end
-        end
-        
-        -- Connect to CharacterAdded for this player
-        local charConn = plr.CharacterAdded:Connect(onCharAdded)
-        table.insert(connections, charConn)
-        
-        -- Check if character already exists
-        if plr.Character then
-            onCharAdded(plr.Character)
-        end
-    end)
-    
-    -- Listen for CharacterAdded on existing players (in case they respawn)
-    for _, plr in pairs(Players:GetPlayers()) do
-        if plr ~= Player then
-            local existingConn = plr.CharacterAdded:Connect(function(char)
-                task.wait(0.5)
-                if char and char.Parent then
-                    if Features.ESP.HPBarOnly and not Features.ESP.Enabled then
-                        addHPBarOnly(char)
-                    elseif Features.ESP.Enabled then
-                        addFullESP(char)
-                    end
-                end
-            end)
-            table.insert(connections, existingConn)
-        end
-    end
-    
-    -- Cleanup dead characters
+    for _, plr in pairs(Players:GetPlayers()) do if plr ~= Player and plr.Character then if Features.ESP.HPBarOnly and not Features.ESP.Enabled then addHPBarOnly(plr.Character) elseif Features.ESP.Enabled then addFullESP(plr.Character) end end end
     if connections.ESP then connections.ESP:Disconnect() end
-    connections.ESP = RunService.Stepped:Connect(function()
-        for char, data in pairs(espStorage) do
-            if not char or not char.Parent then
-                if data.Highlight then data.Highlight:Destroy() end
-                if data.Billboard then data.Billboard:Destroy() end
-                if data.HPConnection then data.HPConnection:Disconnect() end
-                espStorage[char] = nil
-            end
-        end
-    end)
+    connections.ESP = RunService.Stepped:Connect(function() for char, data in pairs(espStorage) do if not char.Parent then if data.Highlight then data.Highlight:Destroy() end; if data.Billboard then data.Billboard:Destroy() end; if data.HPConnection then data.HPConnection:Disconnect() end; espStorage[char] = nil end end end)
 end
 
 -- ==================== AUTO JUMP ====================
@@ -786,7 +406,7 @@ local function startAutoJump()
     end)
 end
 
--- ==================== BOT MOVEMENT ====================
+-- ==================== BOT MOVEMENT (FIXED) ====================
 local function highlightWaypoint(index)
     for i, wp in pairs(Features.Bot.Waypoints) do
         if wp.Part and wp.Part.Parent then
@@ -849,12 +469,14 @@ local function startBotMovement()
         local targetPos = wp.Position
         local distance = (root.Position - targetPos).Magnitude
         
+        -- ПОВОРОТ К ТОЧКЕ
         local lookAtCFrame = CFrame.lookAt(root.Position, Vector3.new(targetPos.X, root.Position.Y, targetPos.Z))
         root.CFrame = CFrame.new(root.Position, lookAtCFrame.LookVector)
         
         if distance > 4 then
             jumpedOnCurrent = false
             
+            -- ДВИЖЕНИЕ
             local moveDir = (targetPos - root.Position).Unit
             local moveDistance = math.min((Features.Bot.SpeedEnabled and Features.Bot.Speed or 16) * 0.05, distance)
             root.CFrame = root.CFrame + (moveDir * moveDistance)
@@ -862,6 +484,7 @@ local function startBotMovement()
             hum:Move(moveDir, false)
             hum.WalkSpeed = Features.Bot.SpeedEnabled and Features.Bot.Speed or 16
             
+            -- ПРЫЖОК ПРИ ПРЕПЯТСТВИИ С ПРОВЕРКОЙ
             local rayOrigin = root.Position + Vector3.new(0, 1, 0)
             local raycastResult = Workspace:Raycast(rayOrigin, moveDir * 3)
             if raycastResult and raycastResult.Instance and raycastResult.Instance.CanCollide then
@@ -1400,7 +1023,7 @@ botSpeedInput.FocusLost:Connect(function()
     end
 end)
 
--- ==================== BOT EDITOR (WITH ORIGINAL LINES) ====================
+-- ==================== BOT EDITOR ====================
 local BotEditorGui = Instance.new("ScreenGui"); BotEditorGui.Name = "BotEditorGui"; BotEditorGui.Parent = CoreGui; BotEditorGui.ResetOnSpawn = false
 local BotEditorWindow = Instance.new("Frame"); BotEditorWindow.Size = UDim2.new(0, 280, 0, 260); BotEditorWindow.Position = UDim2.new(0.7, -140, 0.3, -130); BotEditorWindow.BackgroundColor3 = Color3.fromRGB(10, 10, 18); BotEditorWindow.BorderSizePixel = 0; BotEditorWindow.Visible = false; BotEditorWindow.Parent = BotEditorGui; addCorner(BotEditorWindow, 12); addStroke(BotEditorWindow, 2, Color3.fromRGB(60, 100, 255))
 local beTopBar = Instance.new("Frame"); beTopBar.Size = UDim2.new(1, 0, 0, 35); beTopBar.BackgroundColor3 = Color3.fromRGB(14, 14, 24); beTopBar.BorderSizePixel = 0; beTopBar.Active = true; beTopBar.Parent = BotEditorWindow; addCorner(beTopBar, 12)
@@ -1420,62 +1043,36 @@ addBEBtn("📍 Create Waypoint", function()
     local root = Player.Character.HumanoidRootPart
     local pos = root.Position
     local n = #Features.Bot.Waypoints + 1
-    
-    -- Remove last WP to player beam
-    removeLastWPToPlayerBeam()
-    
-    -- Create new waypoint part
     local part = Instance.new("Part")
-    part.Size = Vector3.new(1.5, 1.5, 1.5)
+    part.Size = Vector3.new(1, 1, 1)
     part.Position = pos
     part.Anchored = true
     part.CanCollide = false
     part.Color = Color3.fromRGB(60, 100, 255)
     part.Material = Enum.Material.Neon
     part.Parent = Workspace
-    
     local light = Instance.new("PointLight")
-    light.Brightness = 2
-    light.Range = 12
+    light.Brightness = 1
+    light.Range = 10
     light.Color = Color3.fromRGB(60, 100, 255)
     light.Parent = part
-    
     local bb = Instance.new("BillboardGui")
-    bb.Size = UDim2.new(0, 120, 0, 30)
-    bb.StudsOffset = Vector3.new(0, 2.5, 0)
+    bb.Size = UDim2.new(0, 100, 0, 20)
+    bb.StudsOffset = Vector3.new(0, 2, 0)
     bb.AlwaysOnTop = true
     bb.Parent = part
-    
     local lbl = Instance.new("TextLabel")
     lbl.Size = UDim2.new(1, 0, 1, 0)
     lbl.BackgroundTransparency = 1
-    lbl.Text = "📍 WP #" .. n
-    lbl.TextColor3 = Color3.fromRGB(255, 255, 255)
+    lbl.Text = "WP #" .. n
+    lbl.TextColor3 = Color3.new(1, 1, 1)
     lbl.Font = Enum.Font.GothamBold
-    lbl.TextSize = 14
-    lbl.TextStrokeTransparency = 0
-    lbl.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+    lbl.TextSize = 12
     lbl.Parent = bb
-    
-    local newWp = {Part = part, Position = pos}
-    table.insert(Features.Bot.Waypoints, newWp)
+
+    table.insert(Features.Bot.Waypoints, {Part = part, Position = pos})
     table.insert(botWaypointParts, part)
-    
-    -- Create beam between previous and new waypoint
-    if #Features.Bot.Waypoints >= 2 then
-        local prevPart = Features.Bot.Waypoints[#Features.Bot.Waypoints - 1].Part
-        local newPart = Features.Bot.Waypoints[#Features.Bot.Waypoints].Part
-        local beam = createBeamBetweenParts(prevPart, newPart)
-        if beam then
-            newWp.Beam = beam
-            registerBeam(beam)
-        end
-    end
-    
-    -- Create last WP to player beam if bot is off
-    if not Features.Bot.Enabled then
-        createLastWPToPlayerBeam()
-    end
+    createLastWPToPlayerBeam()
 end)
 
 addBEBtn("🗑 Delete Last Point", function()
@@ -1488,18 +1085,13 @@ addBEBtn("🗑 Delete Last Point", function()
     table.remove(Features.Bot.Waypoints, #Features.Bot.Waypoints)
     if #botWaypointParts > 0 then table.remove(botWaypointParts, #botWaypointParts) end
 
-    -- Recreate beams between remaining points
-    clearAllWaypointBeams()
-    for i = 2, #Features.Bot.Waypoints do
-        local beam = createBeamBetweenParts(Features.Bot.Waypoints[i-1].Part, Features.Bot.Waypoints[i].Part)
-        if beam then
-            Features.Bot.Waypoints[i].Beam = beam
-            registerBeam(beam)
-        end
+    if #Features.Bot.Waypoints > 0 then
+        local newLastWp = Features.Bot.Waypoints[#Features.Bot.Waypoints]
+        if newLastWp and newLastWp.Beam then destroyBeam(newLastWp.Beam) end
     end
 
     removeLastWPToPlayerBeam()
-    if #Features.Bot.Waypoints > 0 and not Features.Bot.Enabled then
+    if #Features.Bot.Waypoints > 0 then
         createLastWPToPlayerBeam()
     end
 
@@ -1515,7 +1107,6 @@ end)
 
 addBEBtn("🗑 Clear Waypoints", function()
     clearWaypointBeams()
-    clearAllWaypointBeams()
     stopBot()
 end)
 
@@ -1591,9 +1182,6 @@ Player.CharacterAdded:Connect(function(char)
     if autoJumpEnabled then startAutoJump() end
     if not Features.Bot.Enabled then createLastWPToPlayerBeam() end
 end)
-
--- ==================== START CHAT HOOK ====================
-setupChatHook()
 
 -- ==================== SELECT FIRST TAB ====================
 if TabPages[1] and TabPages[1].Page then TabPages[1].Page.Visible = true end
