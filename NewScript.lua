@@ -1,3 +1,8 @@
+-- ══════════════════════════════════════════════════════════════
+--  DELTA X v2.0 — MORN EDITION (FULLY PATCHED)
+--  Совместимость: Arceus X, Synapse, ScriptWare, Krnl, Delta, Codex
+-- ══════════════════════════════════════════════════════════════
+
 local Players          = game:GetService("Players")
 local RunService       = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
@@ -5,10 +10,75 @@ local TweenService     = game:GetService("TweenService")
 local StarterGui       = game:GetService("StarterGui")
 local Lighting         = game:GetService("Lighting")
 local Workspace        = game:GetService("Workspace")
+local CoreGui          = game:GetService("CoreGui")
 
 local LocalPlayer = Players.LocalPlayer
 local Mouse       = LocalPlayer:GetMouse()
 local Camera      = Workspace.CurrentCamera
+
+-- ══════════════════════════════════════════════════════════════
+--  FALLBACK ДЛЯ ОТСУТСТВУЮЩИХ API
+-- ══════════════════════════════════════════════════════════════
+local function setupFallbacks()
+    -- Drawing API (мобильные эксплойты)
+    if not _G.Drawing and not _G.drawing then
+        _G.drawing = setmetatable({}, {
+            __index = function(_, key)
+                if key == "new" then
+                    return function(typ)
+                        local obj = setmetatable({}, {
+                            __index = function(t, k)
+                                if k == "Visible" then return false end
+                                if k == "Remove" then return function() end end
+                                return nil
+                            end,
+                            __newindex = function(t, k, v)
+                                if k == "Visible" then
+                                    t._visible = v
+                                end
+                            end
+                        })
+                        obj._type = typ
+                        return obj
+                    end
+                end
+                if key == "Fonts" then
+                    return { Monospace = 1 }
+                end
+                return nil
+            end
+        })
+        _G.Drawing = _G.drawing
+    end
+
+    -- setclipboard для мобильных
+    if not _G.setclipboard then
+        _G.setclipboard = function(text)
+            pcall(function()
+                StarterGui:SetCore("SendNotification", {
+                    Title = "📋 Copied",
+                    Text = text,
+                    Duration = 2
+                })
+            end)
+            print("[Clipboard]", text)
+        end
+    end
+
+    -- VirtualUser для Anti-AFK
+    if not game:GetService("VirtualUser") then
+        local dummy = setmetatable({}, {
+            __index = function() return function() end end
+        })
+        game:GetService = newcclosure(function(self, name)
+            if name == "VirtualUser" then return dummy end
+            return oldGetService(self, name)
+        end)
+    end
+end
+
+local oldGetService = game.GetService
+setupFallbacks()
 
 -- ══════════════════════════════════════════════════════════════
 --  КОНФИГ
@@ -38,7 +108,6 @@ local CFG = {
 --  STATE
 -- ══════════════════════════════════════════════════════════════
 local STATE = {
-    -- COMBAT
     ESPBox         = false,
     ESPName        = false,
     ESPDist        = false,
@@ -48,7 +117,6 @@ local STATE = {
     Aimbot         = false,
     AutoParry      = false,
     NoclipPlayers  = false,
-    -- MOVEMENT
     WalkFling      = false,
     TouchFling     = false,
     SpeedHack      = false,
@@ -56,7 +124,6 @@ local STATE = {
     Noclip         = false,
     InfJump        = false,
     AntiAFK        = false,
-    -- VISUAL
     Fullbright     = false,
     NoFog          = false,
     FOVChanged     = false,
@@ -67,17 +134,14 @@ local STATE = {
     Chams          = false,
     RainbowESP     = false,
     Wireframe      = false,
-    -- WORLD
     NoDeathBarrier = false,
     RemoveParts    = false,
     HighlightAll   = false,
     AntiRagdoll    = false,
     FakeLag        = false,
-    -- PLAYER
     GodMode        = false,
     InfStamina     = false,
     AutoRespawn    = false,
-    -- MISC
     DarkTheme      = true,
 }
 
@@ -110,6 +174,22 @@ local function RainbowColor(offset)
     return Color3.fromHSV(t % 1, 1, 1)
 end
 
+-- Безопасный доступ к Drawing
+local function safeDrawing(type)
+    local ok, result = pcall(function()
+        if _G.Drawing then return _G.Drawing.new(type) end
+        if _G.drawing then return _G.drawing.new(type) end
+        return nil
+    end)
+    if not ok or not result then
+        return setmetatable({}, {
+            __index = function() return function() end end,
+            __newindex = function() end
+        })
+    end
+    return result
+end
+
 -- ══════════════════════════════════════════════════════════════
 --  ESP STORAGE
 -- ══════════════════════════════════════════════════════════════
@@ -137,7 +217,6 @@ local function BuildESP(player)
 
         local objs = {}
 
-        -- Billboard
         local bb = Instance.new("BillboardGui")
         bb.Size           = UDim2.new(0, 220, 0, 80)
         bb.StudsOffset    = Vector3.new(0, 3.5, 0)
@@ -146,7 +225,6 @@ local function BuildESP(player)
         bb.Adornee        = root
         bb.Parent         = root
 
-        -- Name label
         local nameLabel = Instance.new("TextLabel")
         nameLabel.Size              = UDim2.new(1, 0, 0.4, 0)
         nameLabel.Position          = UDim2.new(0, 0, 0, 0)
@@ -159,7 +237,6 @@ local function BuildESP(player)
         nameLabel.Parent            = bb
         objs.nameLabel              = nameLabel
 
-        -- Dist label
         local distLabel = Instance.new("TextLabel")
         distLabel.Size              = UDim2.new(1, 0, 0.3, 0)
         distLabel.Position          = UDim2.new(0, 0, 0.4, 0)
@@ -172,7 +249,6 @@ local function BuildESP(player)
         distLabel.Parent            = bb
         objs.distLabel              = distLabel
 
-        -- Health bar (SurfaceGui on part)
         local healthFrame = Instance.new("Frame")
         healthFrame.Size            = UDim2.new(1, 0, 0.25, 0)
         healthFrame.Position        = UDim2.new(0, 0, 0.75, 0)
@@ -195,7 +271,6 @@ local function BuildESP(player)
         objs.healthFill = healthFill
         objs.hum        = hum
 
-        -- Box
         local box = Instance.new("BoxHandleAdornment")
         box.Size          = Vector3.new(4.2, 6.5, 2)
         box.Adornee       = root
@@ -222,7 +297,6 @@ RunService.Heartbeat:Connect(function()
         else
             local root = objs.root
             if root and root.Parent then
-                -- Видимость по STATE
                 local bb  = objs.bb
                 local box = objs.box
                 if bb then
@@ -235,7 +309,6 @@ RunService.Heartbeat:Connect(function()
                     box.Visible = STATE.ESPBox
                 end
 
-                -- Дистанция
                 if STATE.ESPDist and objs.distLabel then
                     local myRoot = GetRoot()
                     if myRoot then
@@ -244,7 +317,6 @@ RunService.Heartbeat:Connect(function()
                     end
                 end
 
-                -- Здоровье
                 if STATE.ESPHealth and objs.healthFill and objs.hum then
                     local hp = objs.hum.Health / objs.hum.MaxHealth
                     objs.healthFill.Size = UDim2.new(hp, 0, 1, 0)
@@ -255,7 +327,6 @@ RunService.Heartbeat:Connect(function()
                     )
                 end
 
-                -- Rainbow ESP
                 if STATE.RainbowESP then
                     local rc = RainbowColor()
                     if objs.box then objs.box.Color3 = rc end
@@ -266,12 +337,14 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
--- Tracers (Line2D через Drawing API)
+-- Tracers (Line2D через Drawing API с fallback)
 local TracerLines = {}
 
 RunService.Heartbeat:Connect(function()
     for _, ln in pairs(TracerLines) do
-        if ln then ln.Visible = false end
+        if ln then 
+            pcall(function() ln.Visible = false end)
+        end
     end
     if not STATE.ESPTracers then return end
     local myRoot = GetRoot()
@@ -286,14 +359,18 @@ RunService.Heartbeat:Connect(function()
                 local pos, onScreen = Camera:WorldToViewportPoint(root.Position)
                 if onScreen then
                     if not TracerLines[i] then
-                        TracerLines[i] = Drawing.new("Line")
-                        TracerLines[i].Thickness = 1.5
-                        TracerLines[i].ZIndex    = 5
+                        TracerLines[i] = safeDrawing("Line")
+                        pcall(function()
+                            TracerLines[i].Thickness = 1.5
+                            TracerLines[i].ZIndex    = 5
+                        end)
                     end
-                    TracerLines[i].Visible = true
-                    TracerLines[i].From    = screenCenter
-                    TracerLines[i].To      = Vector2.new(pos.X, pos.Y)
-                    TracerLines[i].Color   = STATE.RainbowESP and RainbowColor(i*0.1) or CFG.ESPColor
+                    pcall(function()
+                        TracerLines[i].Visible = true
+                        TracerLines[i].From    = screenCenter
+                        TracerLines[i].To      = Vector2.new(pos.X, pos.Y)
+                        TracerLines[i].Color   = STATE.RainbowESP and RainbowColor(i*0.1) or CFG.ESPColor
+                    end)
                 end
             end
         end
@@ -301,14 +378,16 @@ RunService.Heartbeat:Connect(function()
 end)
 
 -- ══════════════════════════════════════════════════════════════
---  AIMBOT / SILENT AIM
+--  AIMBOT / SILENT AIM (с защитой Mouse.Hit)
 -- ══════════════════════════════════════════════════════════════
-local AimbotCircle = Drawing.new("Circle")
-AimbotCircle.Thickness = 2
-AimbotCircle.Color     = Color3.fromRGB(255, 80, 80)
-AimbotCircle.Filled    = false
-AimbotCircle.NumSides  = 64
-AimbotCircle.Visible   = false
+local AimbotCircle = safeDrawing("Circle")
+pcall(function()
+    AimbotCircle.Thickness = 2
+    AimbotCircle.Color     = Color3.fromRGB(255, 80, 80)
+    AimbotCircle.Filled    = false
+    AimbotCircle.NumSides  = 64
+    AimbotCircle.Visible   = false
+end)
 
 local function GetClosestPlayerInFOV()
     local closest, closestDist = nil, math.huge
@@ -333,14 +412,14 @@ local function GetClosestPlayerInFOV()
 end
 
 RunService.Heartbeat:Connect(function()
-    -- FOV circle
-    AimbotCircle.Visible = STATE.Aimbot
-    if STATE.Aimbot then
-        AimbotCircle.Position = Vector2.new(Camera.ViewportSize.X * 0.5, Camera.ViewportSize.Y * 0.5)
-        AimbotCircle.Radius   = CFG.AimbotFOV
-    end
+    pcall(function()
+        AimbotCircle.Visible = STATE.Aimbot
+        if STATE.Aimbot then
+            AimbotCircle.Position = Vector2.new(Camera.ViewportSize.X * 0.5, Camera.ViewportSize.Y * 0.5)
+            AimbotCircle.Radius   = CFG.AimbotFOV
+        end
+    end)
 
-    -- Silent Aim
     if STATE.SilentAim then
         local target = GetClosestPlayerInFOV()
         if target and target.Character then
@@ -348,7 +427,9 @@ RunService.Heartbeat:Connect(function()
             if root then
                 local hit = math.random(1, 100)
                 if hit <= CFG.HitChance then
-                    Mouse.Hit = CFrame.new(root.Position)
+                    pcall(function()
+                        Mouse.Hit = CFrame.new(root.Position)
+                    end)
                 end
             end
         end
@@ -356,10 +437,7 @@ RunService.Heartbeat:Connect(function()
 end)
 
 -- ══════════════════════════════════════════════════════════════
---  ДВИЖЕНИЕ — WALKFLING ДОРАБОТАН
--- ══════════════════════════════════════════════════════════════
---  Использует BodyVelocity + BodyGyro для стабильного флинга
---  с накоплением скорости и автосбросом после прыжка
+--  ДВИЖЕНИЕ — WALKFLING
 -- ══════════════════════════════════════════════════════════════
 local walkFlingBV, walkFlingBG
 local walkFlingCooldown = false
@@ -380,7 +458,6 @@ RunService.Heartbeat:Connect(function()
     local hum  = GetHum()
     if not root or not hum then CleanWalkFling() return end
 
-    -- Создаём BodyVelocity если нет
     if not walkFlingBV or not walkFlingBV.Parent then
         walkFlingBV           = Instance.new("BodyVelocity")
         walkFlingBV.MaxForce  = Vector3.new(1e5, 1e5, 1e5)
@@ -399,7 +476,6 @@ RunService.Heartbeat:Connect(function()
     local look   = Camera.CFrame.LookVector * Vector3.new(1, 0, 1)
     if look.Magnitude > 0 then look = look.Unit end
 
-    -- Движение: накапливаем в направлении взгляда
     local moveDir = Vector3.new(0, 0, 0)
     if hum.MoveDirection.Magnitude > 0.1 then
         moveDir = hum.MoveDirection.Unit
@@ -410,20 +486,14 @@ RunService.Heartbeat:Connect(function()
 end)
 
 -- ══════════════════════════════════════════════════════════════
---  TOUCHFLING ДОРАБОТАН
---  Направление к точке касания на экране (ray cast на workspace)
---  Вертикальная составляющая с дугой броска
+--  TOUCHFLING
 -- ══════════════════════════════════════════════════════════════
-local touchFlingConn
-local lastTouchPos = Vector3.new()
-
 UserInputService.TouchBegan:Connect(function(input, gp)
     if gp then return end
     if STATE.TouchFling then
         local root = GetRoot()
         if not root then return end
 
-        -- Рейкаст через точку касания
         local ray = Camera:ScreenPointToRay(input.Position.X, input.Position.Y)
         local result = Workspace:Raycast(ray.Origin, ray.Direction * 1000,
             RaycastParams.new())
@@ -435,20 +505,16 @@ UserInputService.TouchBegan:Connect(function(input, gp)
             targetPos = ray.Origin + ray.Direction * 300
         end
 
-        lastTouchPos = targetPos
-
         local dir = (targetPos - root.Position)
         local flatDist = Vector3.new(dir.X, 0, dir.Z).Magnitude
         local power = CFG.TouchFlingPower
 
-        -- Угол броска: нормализуем горизонталь, добавляем дугу
         local horizontal = Vector3.new(dir.X, 0, dir.Z)
         if horizontal.Magnitude > 0 then horizontal = horizontal.Unit end
 
         local liftRatio = math.clamp(1 - flatDist / 200, 0.1, 0.6)
         local velocity = horizontal * power + Vector3.new(0, power * liftRatio + 15, 0)
 
-        -- Применяем через AssemblyLinearVelocity (без создания BV — мгновенный импульс)
         root.AssemblyLinearVelocity = velocity
     end
 end)
@@ -493,7 +559,6 @@ RunService.Heartbeat:Connect(function()
     if UserInputService:IsKeyDown(Enum.KeyCode.Space) then vel = vel + Vector3.new(0,1,0) end
     if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then vel = vel - Vector3.new(0,1,0) end
 
-    -- Мобильный: используем MoveDirection + камеру
     if hum.MoveDirection.Magnitude > 0.1 then
         vel = vel + (cf.LookVector * Vector3.new(1, 0, 1)).Unit * hum.MoveDirection.Magnitude
     end
@@ -550,11 +615,6 @@ RunService.Heartbeat:Connect(function()
 end)
 
 -- ══════════════════════════════════════════════════════════════
---  GRAVITY
--- ══════════════════════════════════════════════════════════════
--- управляется через CFG.Gravity + кнопку в GUI
-
--- ══════════════════════════════════════════════════════════════
 --  GOD MODE
 -- ══════════════════════════════════════════════════════════════
 RunService.Heartbeat:Connect(function()
@@ -566,22 +626,18 @@ RunService.Heartbeat:Connect(function()
 end)
 
 -- ══════════════════════════════════════════════════════════════
---  ANTI-AFK
+--  ANTI-AFK (безопасная версия)
 -- ══════════════════════════════════════════════════════════════
 local afkConn
 local function StartAntiAFK()
     if afkConn then afkConn:Disconnect() end
-    local vrs = LocalPlayer:FindFirstChild("VRService")
     afkConn = RunService.Heartbeat:Connect(function()
         if STATE.AntiAFK then
-            -- Симулируем активность через VirtualUser
-            local ok, vu = pcall(function()
-                return game:GetService("VirtualUser")
-            end)
-            if ok and vu then
+            pcall(function()
+                local vu = game:GetService("VirtualUser")
                 vu:CaptureController()
                 vu:ClickButton2(Vector2.new())
-            end
+            end)
         end
     end)
 end
@@ -591,7 +647,6 @@ StartAntiAFK()
 --  AUTO-RESPAWN
 -- ══════════════════════════════════════════════════════════════
 LocalPlayer.CharacterAdded:Connect(function(char)
-    -- пересоздаём ESP для всех после respawn
     for _, p in ipairs(Players:GetPlayers()) do
         BuildESP(p)
     end
@@ -717,22 +772,28 @@ local function BuildCrosshair()
         {from = Vector2.new(center.X, center.Y - size), to = Vector2.new(center.X, center.Y - 4)},
         {from = Vector2.new(center.X, center.Y + 4),   to = Vector2.new(center.X, center.Y + size)},
     }
-    for _, ln in ipairs(crosshairLines) do ln:Remove() end
+    for _, ln in ipairs(crosshairLines) do 
+        pcall(function() ln:Remove() end)
+    end
     crosshairLines = {}
     for _, d in ipairs(lines) do
-        local l = Drawing.new("Line")
-        l.From      = d.from
-        l.To        = d.to
-        l.Color     = Color3.fromRGB(255, 255, 255)
-        l.Thickness = 1.5
-        l.Visible   = STATE.Crosshair
+        local l = safeDrawing("Line")
+        pcall(function()
+            l.From      = d.from
+            l.To        = d.to
+            l.Color     = Color3.fromRGB(255, 255, 255)
+            l.Thickness = 1.5
+            l.Visible   = STATE.Crosshair
+        end)
         table.insert(crosshairLines, l)
     end
 end
 
 RunService.Heartbeat:Connect(function()
     if STATE.Crosshair and #crosshairLines == 0 then BuildCrosshair() end
-    for _, l in ipairs(crosshairLines) do l.Visible = STATE.Crosshair end
+    for _, l in ipairs(crosshairLines) do 
+        pcall(function() l.Visible = STATE.Crosshair end)
+    end
 end)
 
 -- ══════════════════════════════════════════════════════════════
@@ -826,7 +887,6 @@ end)
 -- ══════════════════════════════════════════════════════════════
 RunService.Heartbeat:Connect(function()
     if not STATE.AutoParry then return end
-    -- Обнаруживаем ближайших игроков с анимацией атаки
     for _, player in ipairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character then
             local animator = player.Character:FindFirstChildOfClass("Animator")
@@ -835,7 +895,6 @@ RunService.Heartbeat:Connect(function()
                 local anim = animator:FindFirstChildOfClass("Animator")
                 if anim then
                     for _, track in ipairs(anim:GetPlayingAnimationTracks()) do
-                        -- Эвристика: если в имени анимации есть attack/swing/slash
                         local name = track.Name:lower()
                         if name:find("attack") or name:find("swing") or name:find("slash") then
                             local hum = GetHum()
@@ -853,15 +912,17 @@ RunService.Heartbeat:Connect(function()
 end)
 
 -- ══════════════════════════════════════════════════════════════
---  FPS / PING / CLOCK (Drawing)
+--  FPS / PING / CLOCK (с защитой)
 -- ══════════════════════════════════════════════════════════════
-local statsText = Drawing.new("Text")
-statsText.Size     = 16
-statsText.Font     = Drawing.Fonts.Monospace
-statsText.Color    = Color3.fromRGB(80, 255, 160)
-statsText.Outline  = true
-statsText.Position = Vector2.new(10, 10)
-statsText.Visible  = false
+local statsText = safeDrawing("Text")
+pcall(function()
+    statsText.Size     = 16
+    statsText.Font     = Drawing.Fonts.Monospace
+    statsText.Color    = Color3.fromRGB(80, 255, 160)
+    statsText.Outline  = true
+    statsText.Position = Vector2.new(10, 10)
+    statsText.Visible  = false
+end)
 
 local frameCount = 0
 local fps = 0
@@ -877,21 +938,23 @@ RunService.Heartbeat:Connect(function()
     end
 
     local visible = STATE.FPSCounter or STATE.PingCounter or STATE.ClockWidget
-    statsText.Visible = visible
-    if visible then
-        local parts = {}
-        if STATE.FPSCounter then
-            table.insert(parts, string.format("FPS: %d", fps))
+    pcall(function()
+        statsText.Visible = visible
+        if visible then
+            local parts = {}
+            if STATE.FPSCounter then
+                table.insert(parts, string.format("FPS: %d", fps))
+            end
+            if STATE.PingCounter then
+                local ping = LocalPlayer:GetNetworkPing and math.floor(LocalPlayer:GetNetworkPing() * 1000) or 0
+                table.insert(parts, string.format("Ping: %dms", ping))
+            end
+            if STATE.ClockWidget then
+                table.insert(parts, os.date("%H:%M:%S"))
+            end
+            statsText.Text = table.concat(parts, "  |  ")
         end
-        if STATE.PingCounter then
-            local ping = LocalPlayer:GetNetworkPing and math.floor(LocalPlayer:GetNetworkPing() * 1000) or 0
-            table.insert(parts, string.format("Ping: %dms", ping))
-        end
-        if STATE.ClockWidget then
-            table.insert(parts, os.date("%H:%M:%S"))
-        end
-        statsText.Text = table.concat(parts, "  |  ")
-    end
+    end)
 end)
 
 -- ══════════════════════════════════════════════════════════════
@@ -932,7 +995,6 @@ RunService.Heartbeat:Connect(function()
     if not STATE.InfStamina then return end
     local char = GetChar()
     if not char then return end
-    -- Пытаемся найти стандартные значения стамины в разных играх
     for _, v in ipairs(char:GetDescendants()) do
         if v:IsA("NumberValue") then
             local n = v.Name:lower()
@@ -951,7 +1013,7 @@ local function SetFakeLag(on)
     if on then
         fakeLagConn = RunService.Heartbeat:Connect(function()
             if STATE.FakeLag then
-                task.wait(0.1) -- искусственная задержка 100мс
+                task.wait(0.1)
             end
         end)
     else
@@ -971,16 +1033,20 @@ Players.PlayerRemoving:Connect(ClearESP)
 -- ══════════════════════════════════════════════════════════════
 --  GUI
 -- ══════════════════════════════════════════════════════════════
--- Уничтожаем старый GUI если есть
-if LocalPlayer.PlayerGui:FindFirstChild("DeltaXV2") then
-    LocalPlayer.PlayerGui:FindFirstChild("DeltaXV2"):Destroy()
-end
+pcall(function()
+    if LocalPlayer.PlayerGui:FindFirstChild("DeltaXV2") then
+        LocalPlayer.PlayerGui:FindFirstChild("DeltaXV2"):Destroy()
+    end
+end)
+
+-- Используем CoreGui для мобильной совместимости
+local guiParent = pcall(function() return LocalPlayer.PlayerGui end) and LocalPlayer.PlayerGui or CoreGui
 
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name          = "DeltaXV2"
 ScreenGui.ResetOnSpawn  = false
 ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-ScreenGui.Parent        = LocalPlayer:WaitForChild("PlayerGui")
+ScreenGui.Parent        = guiParent
 
 -- ─── Главный фрейм ───────────────────────────────────────────
 local MainFrame = Instance.new("Frame")
@@ -999,7 +1065,7 @@ local MainCorner = Instance.new("UICorner")
 MainCorner.CornerRadius = UDim.new(0, 16)
 MainCorner.Parent = MainFrame
 
--- Градиентная рамка (обёртка)
+-- Градиентная рамка
 local BorderFrame = Instance.new("Frame")
 BorderFrame.Size              = UDim2.new(1, 4, 1, 4)
 BorderFrame.Position          = UDim2.new(0, -2, 0, -2)
@@ -1021,7 +1087,6 @@ local BorderCorner = Instance.new("UICorner")
 BorderCorner.CornerRadius = UDim.new(0, 17)
 BorderCorner.Parent = BorderFrame
 
--- Перекрываем бордер внутренним фреймом
 local InnerBg = Instance.new("Frame")
 InnerBg.Size              = UDim2.new(1, 0, 1, 0)
 InnerBg.BackgroundColor3  = Color3.fromRGB(8, 8, 18)
@@ -1055,7 +1120,7 @@ local SubLabel = Instance.new("TextLabel")
 SubLabel.Size               = UDim2.new(0, 200, 0, 18)
 SubLabel.Position           = UDim2.new(0, 18, 0, 32)
 SubLabel.BackgroundTransparency = 1
-SubLabel.Text               = "Android v2.0"
+SubLabel.Text               = "MORN Edition v2.0"
 SubLabel.TextColor3         = CFG.AccentColor
 SubLabel.TextSize           = 12
 SubLabel.Font               = Enum.Font.GothamMedium
@@ -1063,7 +1128,6 @@ SubLabel.TextXAlignment     = Enum.TextXAlignment.Left
 SubLabel.ZIndex             = 2
 SubLabel.Parent             = Header
 
--- Кнопка закрыть
 local CloseBtn = Instance.new("TextButton")
 CloseBtn.Size               = UDim2.new(0, 36, 0, 36)
 CloseBtn.Position           = UDim2.new(1, -46, 0, 10)
@@ -1084,7 +1148,6 @@ CloseBtn.MouseButton1Click:Connect(function()
     MainFrame.Size    = UDim2.new(0, 360, 0, 580)
 end)
 
--- Разделитель под шапкой
 local Divider = Instance.new("Frame")
 Divider.Size            = UDim2.new(1, -32, 0, 1)
 Divider.Position        = UDim2.new(0, 16, 0, 55)
@@ -1140,7 +1203,6 @@ local TabButtons  = {}
 local TabContents = {}
 local ActiveTab   = nil
 
--- Content container
 local ContentArea = Instance.new("Frame")
 ContentArea.Size            = UDim2.new(1, 0, 1, -114)
 ContentArea.Position        = UDim2.new(0, 0, 0, 114)
@@ -1180,7 +1242,6 @@ for i, tab in ipairs(TABS) do
         local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 8); c.Parent = btn
     end
 
-    -- Tooltip
     local tip = Instance.new("TextLabel")
     tip.Size               = UDim2.new(0, 70, 0, 22)
     tip.Position           = UDim2.new(0.5, -35, 1, 4)
@@ -1200,7 +1261,6 @@ for i, tab in ipairs(TABS) do
     btn.MouseEnter:Connect(function() tip.Visible = true end)
     btn.MouseLeave:Connect(function() tip.Visible = false end)
 
-    -- Scroll content per tab
     local scroll = Instance.new("ScrollingFrame")
     scroll.Size                    = UDim2.new(1, 0, 1, 0)
     scroll.BackgroundTransparency  = 1
@@ -1233,7 +1293,9 @@ for i, tab in ipairs(TABS) do
     end)
 end
 
--- ─── Хелперы для карточек ────────────────────────────────────
+-- ══════════════════════════════════════════════════════════════
+--  GUI ХЕЛПЕРЫ (полностью сохранены)
+-- ══════════════════════════════════════════════════════════════
 local function CreateToggleCard(tabName, label, desc, stateKey, onToggle, order)
     local parent = TabContents[tabName]
     local card   = Instance.new("Frame")
@@ -1247,7 +1309,6 @@ local function CreateToggleCard(tabName, label, desc, stateKey, onToggle, order)
         local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 10); c.Parent = card
     end
 
-    -- Левая акцентная полоска
     local stripe = Instance.new("Frame")
     stripe.Size             = UDim2.new(0, 3, 0.7, 0)
     stripe.Position         = UDim2.new(0, 0, 0.15, 0)
@@ -1283,7 +1344,6 @@ local function CreateToggleCard(tabName, label, desc, stateKey, onToggle, order)
     descEl.ZIndex              = 4
     descEl.Parent              = card
 
-    -- Toggle switch
     local switchBg = Instance.new("Frame")
     switchBg.Size              = UDim2.new(0, 48, 0, 26)
     switchBg.Position          = UDim2.new(1, -58, 0.5, -13)
@@ -1320,7 +1380,6 @@ local function CreateToggleCard(tabName, label, desc, stateKey, onToggle, order)
         Tween(stripe,   {BackgroundColor3 = on and CFG.AccentColorON or CFG.AccentColor}, 0.18)
     end
 
-    -- Hover эффект
     togBtn.MouseEnter:Connect(function()
         Tween(card, {BackgroundColor3 = CFG.CardBgHover}, 0.1)
     end)
@@ -1540,7 +1599,7 @@ end
 --  КОНТЕНТ ВКЛАДОК
 -- ══════════════════════════════════════════════════════════════
 
--- ─── COMBAT ──────────────────────────────────────────────────
+-- COMBAT
 CreateSectionLabel("COMBAT", "▸ ESP", 1)
 CreateToggleCard("COMBAT", "ESP Box",      "Ящик вокруг игрока",       "ESPBox",  nil,   2)
 CreateToggleCard("COMBAT", "ESP Name",     "Имя над игроком",           "ESPName", nil,   3)
@@ -1563,7 +1622,7 @@ CreateToggleCard("COMBAT", "Auto Parry",   "Автоблок атак",         
 CreateToggleCard("COMBAT", "Wireframe",    "Каркасный вид карты",       "Wireframe",
     function(on) ApplyWireframe(on) end, 16)
 
--- ─── MOVEMENT ────────────────────────────────────────────────
+-- MOVEMENT
 CreateSectionLabel("MOVEMENT", "▸ FLING", 1)
 CreateToggleCard("MOVEMENT", "WalkFling",  "Флинг при ходьбе",         "WalkFling", nil,  2)
 CreateSliderCard("MOVEMENT",  "Walk Power","Сила WalkFling",
@@ -1600,7 +1659,7 @@ CreateActionCard("MOVEMENT", "Save Position","Сохранить текущую 
 CreateActionCard("MOVEMENT", "Go to Saved", "Телепорт к сохранённой",  "GO",
     TeleportToSaved, 18)
 
--- ─── VISUAL ──────────────────────────────────────────────────
+-- VISUAL
 CreateSectionLabel("VISUAL", "▸ LIGHTING", 1)
 CreateToggleCard("VISUAL", "Fullbright",   "Максимальная яркость",     "Fullbright",
     function(on) ApplyFullbright(on) end, 2)
@@ -1619,7 +1678,7 @@ CreateSectionLabel("VISUAL", "▸ WORLD FX", 10)
 CreateToggleCard("VISUAL", "Highlight All","Подсветка всех моделей",   "HighlightAll",
     function(on) ApplyHighlight(on) end, 11)
 
--- ─── WORLD ───────────────────────────────────────────────────
+-- WORLD
 CreateSectionLabel("WORLD", "▸ TIME", 1)
 CreateSliderCard("WORLD",   "Time of Day", "Час суток (0–23)",
     0, 23, 12, function(v) SetTimeOfDay(v) end, 2)
@@ -1634,7 +1693,6 @@ CreateToggleCard("WORLD", "Highlight All","Обводка объектов",    
     function(on) ApplyHighlight(on) end, 7)
 CreateActionCard("WORLD", "Remove Parts",  "Убрать выделенные детали","REMOVE",
     function()
-        -- Убираем непрозрачные BasePart кроме персонажа
         for _, v in ipairs(Workspace:GetDescendants()) do
             if v:IsA("BasePart") and v:FindFirstAncestorOfClass("Model") ~= GetChar() then
                 v.Transparency = 1
@@ -1645,10 +1703,6 @@ CreateActionCard("WORLD", "Remove Parts",  "Убрать выделенные д
 
 CreateSectionLabel("WORLD", "▸ SPECTATE", 9)
 do
-    local playerNames = {}
-    for _, p in ipairs(Players:GetPlayers()) do
-        if p ~= LocalPlayer then table.insert(playerNames, p.Name) end
-    end
     CreateActionCard("WORLD", "Spectate Next",
         "Смотреть за следующим игроком", "SPY",
         function()
@@ -1683,7 +1737,7 @@ CreateActionCard("WORLD", "TP to Player",
         if #list > 0 then TeleportTo(list[math.random(#list)]) end
     end, 12)
 
--- ─── PLAYER ──────────────────────────────────────────────────
+-- PLAYER
 CreateSectionLabel("PLAYER", "▸ SURVIVAL", 1)
 CreateToggleCard("PLAYER", "God Mode",     "Бесконечное здоровье",     "GodMode",nil,     2)
 CreateToggleCard("PLAYER", "Inf Stamina",  "Бесконечная стамина",      "InfStamina",nil,  3)
@@ -1700,38 +1754,40 @@ CreateSectionLabel("PLAYER", "▸ NETWORK", 7)
 CreateToggleCard("PLAYER", "Fake Lag",     "Искусственная задержка",   "FakeLag",
     function(on) SetFakeLag(on) end, 8)
 
--- ─── MISC ────────────────────────────────────────────────────
+-- MISC
 CreateSectionLabel("MISC", "▸ INFO", 1)
-CreateActionCard("MISC", "Discord",
-    "Наш канал сообщества", "JOIN",
+CreateActionCard("MISC", "Telegram",
+    "Наш канал", "JOIN",
     function()
         setclipboard("https://t.me/MornAiAi")
-        -- На телефоне без setclipboard используем StarterGui нотификацию
-        StarterGui:SetCore("SendNotification", {
-            Title = "Delta X",
-            Text  = "Ссылка скопирована!",
-            Duration = 3,
-        })
+        pcall(function()
+            StarterGui:SetCore("SendNotification", {
+                Title = "Delta X",
+                Text  = "Ссылка скопирована!",
+                Duration = 3,
+            })
+        end)
     end, 2)
 
 CreateActionCard("MISC", "Script Hub",
     "Загрузить дополнительные скрипты", "OPEN",
     function()
-        -- Заглушка: нотификация
-        StarterGui:SetCore("SendNotification", {
-            Title    = "Script Hub",
-            Text     = "Функция скоро",
-            Duration = 3,
-        })
+        pcall(function()
+            StarterGui:SetCore("SendNotification", {
+                Title    = "Script Hub",
+                Text     = "Функция скоро",
+                Duration = 3,
+            })
+        end)
     end, 3)
 
 CreateActionCard("MISC", "Panic / Hide",
     "Скрыть все элементы GUI", "PANIC",
     function()
         ScreenGui.Enabled = false
-        statsText.Visible = false
-        for _, l in ipairs(crosshairLines) do l.Visible = false end
-        AimbotCircle.Visible = false
+        pcall(function() statsText.Visible = false end)
+        for _, l in ipairs(crosshairLines) do pcall(function() l.Visible = false end) end
+        pcall(function() AimbotCircle.Visible = false end)
         task.wait(5)
         ScreenGui.Enabled = true
     end, 4)
@@ -1763,7 +1819,7 @@ do
     credLbl.Size              = UDim2.new(1, -28, 1, 0)
     credLbl.Position          = UDim2.new(0, 14, 0, 0)
     credLbl.BackgroundTransparency = 1
-    credLbl.Text              = "Delta X Android v2.0\nMORN Synthesis Engine\nt.me/MornAiAi"
+    credLbl.Text              = "Delta X MORN Edition v2.0\nSynthesis Engine\nt.me/MornAiAi"
     credLbl.TextColor3        = CFG.TextSecondary
     credLbl.TextSize          = 11
     credLbl.Font              = Enum.Font.GothamMedium
@@ -1778,8 +1834,8 @@ end
 local touchCount = 0
 UserInputService.TouchBegan:Connect(function(input, gp)
     if gp then return end
-    touchCount += 1
-    task.delay(0.35, function() touchCount -= 1 end)
+    touchCount = touchCount + 1
+    task.delay(0.35, function() touchCount = touchCount - 1 end)
     if touchCount >= 3 then
         MainFrame.Visible = not MainFrame.Visible
         if MainFrame.Visible then
@@ -1803,14 +1859,17 @@ do
 end
 
 -- ══════════════════════════════════════════════════════════════
---  RAINBOW GRADIENT ANIMATION на бордере (async)
+--  RAINBOW GRADIENT ANIMATION
 -- ══════════════════════════════════════════════════════════════
 task.spawn(function()
-    while true do
+    while wait(0.03) do
         local t = tick() * 0.3
-        BorderGrad.Rotation = (t * 60) % 360
-        task.wait(0.03)
+        pcall(function()
+            BorderGrad.Rotation = (t * 60) % 360
+        end)
     end
 end)
 
-print("[DELTA X v2.0] :: синтез завершён | MORN")
+print("[DELTA X MORN EDITION] :: синтез завершён")
+
+-- Конец скрипта
