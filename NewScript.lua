@@ -1,7 +1,6 @@
 -- ══════════════════════════════════════════════════════════════
---  DELTA X FULL — MORN EDITION
+--  DELTA X FULL — MORN EDITION (С ПЛАВАЮЩЕЙ КНОПКОЙ)
 --  Полная версия, совместимая с 99% эксплойтов
---  Собрана по модульному принципу
 -- ══════════════════════════════════════════════════════════════
 
 local Players = game:GetService("Players")
@@ -60,7 +59,6 @@ local CFG = {
 --  STATE
 -- ══════════════════════════════════════════════════════════════
 local STATE = {
-    -- COMBAT
     ESPBox         = false,
     ESPName        = false,
     ESPDist        = false,
@@ -69,7 +67,6 @@ local STATE = {
     SilentAim      = false,
     Aimbot         = false,
     AutoParry      = false,
-    -- MOVEMENT
     WalkFling      = false,
     TouchFling     = false,
     SpeedHack      = false,
@@ -77,7 +74,6 @@ local STATE = {
     Noclip         = false,
     InfJump        = false,
     AntiAFK        = false,
-    -- VISUAL
     Fullbright     = false,
     NoFog          = false,
     Crosshair      = false,
@@ -87,15 +83,12 @@ local STATE = {
     Chams          = false,
     RainbowESP     = false,
     Wireframe      = false,
-    -- WORLD
     HighlightAll   = false,
     AntiRagdoll    = false,
     FakeLag        = false,
-    -- PLAYER
     GodMode        = false,
     InfStamina     = false,
     AutoRespawn    = false,
-    -- MISC
     DarkTheme      = true,
 }
 
@@ -142,7 +135,6 @@ local function BuildESP(player)
         local hum = char:FindFirstChildOfClass("Humanoid")
         if not root then return end
 
-        -- Billboard
         local bb = Instance.new("BillboardGui")
         bb.Size = UDim2.new(0, 180, 0, 60)
         bb.StudsOffset = Vector3.new(0, 3, 0)
@@ -151,7 +143,6 @@ local function BuildESP(player)
         bb.Adornee = root
         bb.Parent = root
 
-        -- Имя
         local nameLabel = Instance.new("TextLabel")
         nameLabel.Size = UDim2.new(1, 0, 0.4, 0)
         nameLabel.Position = UDim2.new(0, 0, 0, 0)
@@ -163,7 +154,6 @@ local function BuildESP(player)
         nameLabel.Font = Enum.Font.GothamBold
         nameLabel.Parent = bb
 
-        -- Дистанция
         local distLabel = Instance.new("TextLabel")
         distLabel.Size = UDim2.new(1, 0, 0.3, 0)
         distLabel.Position = UDim2.new(0, 0, 0.4, 0)
@@ -175,7 +165,6 @@ local function BuildESP(player)
         distLabel.Font = Enum.Font.Gotham
         distLabel.Parent = bb
 
-        -- Здоровье
         local healthBg = Instance.new("Frame")
         healthBg.Size = UDim2.new(1, 0, 0.2, 0)
         healthBg.Position = UDim2.new(0, 0, 0.7, 0)
@@ -196,7 +185,6 @@ local function BuildESP(player)
         hfc.CornerRadius = UDim.new(0, 3)
         hfc.Parent = healthFill
 
-        -- Бокс
         local box = Instance.new("BoxHandleAdornment")
         box.Size = Vector3.new(4.2, 6.5, 2)
         box.Adornee = root
@@ -218,12 +206,10 @@ local function BuildESP(player)
     end)
 end
 
--- Инициализация ESP
 for _, p in ipairs(Players:GetPlayers()) do BuildESP(p) end
 Players.PlayerAdded:Connect(BuildESP)
 Players.PlayerRemoving:Connect(ClearESP)
 
--- Обновление ESP
 RunService.Heartbeat:Connect(function()
     for player, objs in pairs(espObjects) do
         if not player or not player.Parent then
@@ -241,7 +227,6 @@ RunService.Heartbeat:Connect(function()
                     objs.box.Visible = STATE.ESPBox
                 end
 
-                -- Дистанция
                 if STATE.ESPDist and objs.distLabel then
                     local myRoot = GetRoot()
                     if myRoot then
@@ -250,7 +235,6 @@ RunService.Heartbeat:Connect(function()
                     end
                 end
 
-                -- Здоровье
                 if STATE.ESPHealth and objs.healthFill and objs.hum then
                     local hp = objs.hum.Health / objs.hum.MaxHealth
                     objs.healthFill.Size = UDim2.new(hp, 0, 1, 0)
@@ -261,7 +245,6 @@ RunService.Heartbeat:Connect(function()
                     )
                 end
 
-                -- Rainbow ESP
                 if STATE.RainbowESP then
                     local rc = RainbowColor()
                     if objs.box then objs.box.Color3 = rc end
@@ -273,7 +256,7 @@ RunService.Heartbeat:Connect(function()
 end)
 
 -- ══════════════════════════════════════════════════════════════
---  МОДУЛЬ: AIMBOT (упрощённый, без Drawing)
+--  МОДУЛЬ: AIMBOT
 -- ══════════════════════════════════════════════════════════════
 local function GetClosestPlayer()
     local closest, closestDist = nil, math.huge
@@ -317,8 +300,6 @@ end)
 -- ══════════════════════════════════════════════════════════════
 --  МОДУЛЬ: ДВИЖЕНИЕ
 -- ══════════════════════════════════════════════════════════════
-
--- WALKFLING
 local walkFlingBV, walkFlingBG
 local function CleanWalkFling()
     if walkFlingBV and walkFlingBV.Parent then walkFlingBV:Destroy() end
@@ -359,7 +340,6 @@ RunService.Heartbeat:Connect(function()
     walkFlingBG.CFrame = CFrame.new(root.Position, root.Position + look)
 end)
 
--- TOUCHFLING
 UserInputService.TouchBegan:Connect(function(input, gp)
     if gp then return end
     if STATE.TouchFling then
@@ -385,7 +365,6 @@ UserInputService.TouchBegan:Connect(function(input, gp)
     end
 end)
 
--- FLY
 local flyBV, flyBG
 local function CleanFly()
     if flyBV and flyBV.Parent then flyBV:Destroy() end
@@ -429,7 +408,6 @@ RunService.Heartbeat:Connect(function()
     hum.PlatformStand = true
 end)
 
--- NOCLIP
 RunService.Stepped:Connect(function()
     if not STATE.Noclip then return end
     local char = GetChar()
@@ -439,7 +417,6 @@ RunService.Stepped:Connect(function()
     end
 end)
 
--- INFINITE JUMP
 UserInputService.JumpRequest:Connect(function()
     if STATE.InfJump then
         local hum = GetHum()
@@ -447,7 +424,6 @@ UserInputService.JumpRequest:Connect(function()
     end
 end)
 
--- SPEED HACK
 RunService.Heartbeat:Connect(function()
     local hum = GetHum()
     if not hum then return end
@@ -458,19 +434,16 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
--- JUMP POWER
 RunService.Heartbeat:Connect(function()
     local hum = GetHum()
     if not hum then return end
     hum.JumpPower = CFG.JumpPower
 end)
 
--- GRAVITY
 RunService.Heartbeat:Connect(function()
     Workspace.Gravity = CFG.Gravity
 end)
 
--- ANTI-AFK
 local afkConn
 local function StartAntiAFK()
     if afkConn then afkConn:Disconnect() end
@@ -486,7 +459,6 @@ local function StartAntiAFK()
 end
 StartAntiAFK()
 
--- AUTO-RESPAWN
 LocalPlayer.CharacterAdded:Connect(function()
     for _, p in ipairs(Players:GetPlayers()) do BuildESP(p) end
     if STATE.Fly then
@@ -507,8 +479,6 @@ end)
 -- ══════════════════════════════════════════════════════════════
 --  МОДУЛЬ: VISUAL
 -- ══════════════════════════════════════════════════════════════
-
--- FULLBRIGHT
 local origAmbient, origOutdoor, origBrightness
 local function SaveLighting()
     origAmbient = Lighting.Ambient
@@ -535,7 +505,6 @@ local function ApplyFullbright(on)
     end
 end
 
--- NO FOG
 local origFogEnd, origFogStart
 local function SaveFog()
     origFogEnd = Lighting.FogEnd
@@ -553,7 +522,6 @@ local function ApplyNoFog(on)
     end
 end
 
--- WIREFRAME
 local wireframeObjs = {}
 local function ApplyWireframe(on)
     if on then
@@ -574,7 +542,6 @@ local function ApplyWireframe(on)
     end
 end
 
--- HIGHLIGHT ALL
 local highlightObjs = {}
 local function ApplyHighlight(on)
     if on then
@@ -594,7 +561,6 @@ local function ApplyHighlight(on)
     end
 end
 
--- CHAMS
 local chamHighlights = {}
 RunService.Heartbeat:Connect(function()
     for player, hl in pairs(chamHighlights) do
@@ -624,7 +590,7 @@ RunService.Heartbeat:Connect(function()
 end)
 
 -- ══════════════════════════════════════════════════════════════
---  МОДУЛЬ: MISC (Safe Spot, Teleport, Spectate)
+--  МОДУЛЬ: MISC
 -- ══════════════════════════════════════════════════════════════
 local savedPosition = nil
 local spectateSubject = nil
@@ -659,7 +625,6 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
--- ANTI-RAGDOLL
 RunService.Heartbeat:Connect(function()
     if not STATE.AntiRagdoll then return end
     local hum = GetHum()
@@ -671,7 +636,6 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
--- INFINITE STAMINA
 RunService.Heartbeat:Connect(function()
     if not STATE.InfStamina then return end
     local char = GetChar()
@@ -710,12 +674,12 @@ MainFrame.Active = true
 MainFrame.Draggable = true
 MainFrame.ClipsDescendants = true
 MainFrame.Parent = ScreenGui
+MainFrame.Visible = false -- изначально скрыт
 
 local MainCorner = Instance.new("UICorner")
 MainCorner.CornerRadius = UDim.new(0, 16)
 MainCorner.Parent = MainFrame
 
--- Шапка
 local Header = Instance.new("Frame")
 Header.Size = UDim2.new(1, 0, 0, 50)
 Header.BackgroundTransparency = 1
@@ -757,12 +721,9 @@ cbCorner.CornerRadius = UDim.new(1, 0)
 cbCorner.Parent = CloseBtn
 
 CloseBtn.MouseButton1Click:Connect(function()
-    ScreenGui.Enabled = false
-    task.wait(5)
-    ScreenGui.Enabled = true
+    MainFrame.Visible = false
 end)
 
--- Content Area
 local ContentArea = Instance.new("ScrollingFrame")
 ContentArea.Size = UDim2.new(1, 0, 1, -60)
 ContentArea.Position = UDim2.new(0, 0, 0, 55)
@@ -1031,8 +992,6 @@ end
 -- ══════════════════════════════════════════════════════════════
 --  КОНТЕНТ GUI
 -- ══════════════════════════════════════════════════════════════
-
--- COMBAT
 local sec1 = Instance.new("TextLabel")
 sec1.Size = UDim2.new(1, 0, 0, 22)
 sec1.BackgroundTransparency = 1
@@ -1055,7 +1014,6 @@ CreateSlider("Aimbot FOV", "Радиус цели", 50, 300, 120, function(v) CF
 CreateSlider("Hit Chance", "Вероятность попадания %", 10, 100, 85, function(v) CFG.HitChance = v end, 10)
 CreateToggle("Auto Parry", "Автоматический блок", "AutoParry", 11)
 
--- MOVEMENT
 local sec2 = Instance.new("TextLabel")
 sec2.Size = UDim2.new(1, 0, 0, 22)
 sec2.BackgroundTransparency = 1
@@ -1081,7 +1039,6 @@ CreateSlider("Jump Power", "Сила прыжка", 5, 200, 50, function(v) CFG.
 CreateSlider("Gravity", "Гравитация", 10, 400, 196, function(v) CFG.Gravity = v end, 24)
 CreateToggle("Anti-AFK", "Защита от AFK-кика", "AntiAFK", 25)
 
--- VISUAL
 local sec3 = Instance.new("TextLabel")
 sec3.Size = UDim2.new(1, 0, 0, 22)
 sec3.BackgroundTransparency = 1
@@ -1098,7 +1055,6 @@ CreateToggle("No Fog", "Убрать туман", "NoFog", 28)
 CreateToggle("Wireframe", "Каркасный вид", "Wireframe", 29)
 CreateToggle("Highlight All", "Подсветка всех моделей", "HighlightAll", 30)
 
--- WORLD
 local sec4 = Instance.new("TextLabel")
 sec4.Size = UDim2.new(1, 0, 0, 22)
 sec4.BackgroundTransparency = 1
@@ -1120,7 +1076,6 @@ CreateAction("Remove Parts", "Скрыть все детали карты", "HID
     end
 end, 33)
 
--- PLAYER
 local sec5 = Instance.new("TextLabel")
 sec5.Size = UDim2.new(1, 0, 0, 22)
 sec5.BackgroundTransparency = 1
@@ -1136,7 +1091,6 @@ CreateToggle("God Mode", "Бесконечное здоровье", "GodMode", 3
 CreateToggle("Inf Stamina", "Бесконечная стамина", "InfStamina", 36)
 CreateToggle("Auto Respawn", "Автовозрождение", "AutoRespawn", 37)
 
--- MISC
 local sec6 = Instance.new("TextLabel")
 sec6.Size = UDim2.new(1, 0, 0, 22)
 sec6.BackgroundTransparency = 1
@@ -1164,29 +1118,87 @@ CreateAction("Panic", "Скрыть всё на 5 секунд", "HIDE", functio
 end, 42)
 
 -- ══════════════════════════════════════════════════════════════
---  ОТКРЫТИЕ/ЗАКРЫТИЕ — 3-МЯ КАСАНИЯМИ
+--  ПЛАВАЮЩАЯ КНОПКА ДЛЯ ОТКРЫТИЯ GUI
 -- ══════════════════════════════════════════════════════════════
-local touchCount = 0
-UserInputService.TouchBegan:Connect(function(input, gp)
-    if gp then return end
-    touchCount = touchCount + 1
-    task.delay(0.35, function() touchCount = touchCount - 1 end)
-    if touchCount >= 3 then
+local function CreateFloatingButton()
+    if CoreGui:FindFirstChild("DeltaXButton") then
+        return CoreGui:FindFirstChild("DeltaXButton")
+    end
+
+    local buttonGui = Instance.new("ScreenGui")
+    buttonGui.Name = "DeltaXButton"
+    buttonGui.ResetOnSpawn = false
+    buttonGui.Parent = CoreGui
+
+    local button = Instance.new("TextButton")
+    button.Name = "OpenButton"
+    button.Size = UDim2.new(0, 60, 0, 60)
+    button.Position = UDim2.new(0.02, 0, 0.5, -30)
+    button.BackgroundColor3 = Color3.fromRGB(108, 99, 255)
+    button.Text = "⬡"
+    button.TextColor3 = Color3.fromRGB(255, 255, 255)
+    button.TextSize = 28
+    button.Font = Enum.Font.GothamBold
+    button.BorderSizePixel = 0
+    button.AutoButtonColor = false
+    button.Parent = buttonGui
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(1, 0)
+    corner.Parent = button
+
+    -- Перетаскивание
+    local dragging = false
+    local dragStart = nil
+    local startPos = nil
+
+    button.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = true
+            dragStart = input.Position
+            startPos = button.Position
+        end
+    end)
+
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and (input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseMovement) then
+            local delta = input.Position - dragStart
+            button.Position = UDim2.new(
+                startPos.X.Scale,
+                startPos.X.Offset + delta.X,
+                startPos.Y.Scale,
+                startPos.Y.Offset + delta.Y
+            )
+        end
+    end)
+
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = false
+        end
+    end)
+
+    -- Открытие/закрытие GUI
+    button.MouseButton1Click:Connect(function()
         MainFrame.Visible = not MainFrame.Visible
         if MainFrame.Visible then
             MainFrame.Size = UDim2.new(0, 360, 0, 0)
             Tween(MainFrame, {Size = UDim2.new(0, 360, 0, 520)}, 0.3,
                 Enum.EasingStyle.Back, Enum.EasingDirection.Out)
         end
-    end
-end)
+    end)
+
+    return buttonGui
+end
+
+-- Создаём кнопку
+CreateFloatingButton()
 
 -- ══════════════════════════════════════════════════════════════
---  АНИМАЦИЯ ПОЯВЛЕНИЯ
+--  АНИМАЦИЯ ПОЯВЛЕНИЯ (при первом открытии)
 -- ══════════════════════════════════════════════════════════════
 MainFrame.Size = UDim2.new(0, 360, 0, 0)
-MainFrame.Visible = true
-Tween(MainFrame, {Size = UDim2.new(0, 360, 0, 520)}, 0.35,
-    Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+MainFrame.Visible = false
 
 print("[DELTA X FULL] :: синтез завершён | MORN")
+print("[DELTA X FULL] :: нажмите на кнопку ⬡ для открытия меню")
