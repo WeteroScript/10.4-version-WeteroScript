@@ -1,5 +1,5 @@
 --[[
-    MEREDIOS v5.9 — оперативный контур
+    MEREDIOS v6.1 — оперативный контур
     Roblox / Delta X Mobile
 --]]
 
@@ -262,15 +262,17 @@ local function describeValue(v, depth)
     return t
 end
 
-local function summarizeArgs(args)
+local function summarizeArgs(args, n)
     local parts = {}
-    for i = 1, math.min(#args, 6) do parts[i] = describeValue(args[i], 1) end
-    if #args > 6 then parts[#parts + 1] = "…+" .. (#args - 6) end
+    for i = 1, math.min(n or #args, 6) do
+        parts[i] = describeValue(args[i], 1)
+    end
+    if (n or #args) > 6 then parts[#parts + 1] = "…+" .. ((n or #args) - 6) end
     return table.concat(parts, ", ")
 end
 
 --=============================================================
--- ESP (без "!") + HIGHLIGHT для цели
+-- TARGET HIGHLIGHT / ESP / RAPID FIRE
 --=============================================================
 local SilentAim = {
     Enabled = false,
@@ -282,15 +284,18 @@ local SilentAim = {
     TeamCheck = true,
 }
 
-local ESP = { Enabled = false, Color = Color3.fromRGB(255, 60, 60), Guis = {} }
+-- ESP = контурная подсветка персонажей (Highlight), без ников
+local ESP = {
+    Enabled = false,
+    Color = Color3.fromRGB(255, 60, 60),
+    Highlights = {},
+}
 
---=============================================================
--- RAPID FIRE
---=============================================================
+-- RAPID FIRE на WeaponHit (реальный урон, не косметика)
 local RapidFire = {
     Enabled = false,
     Multiplier = 5,
-    Delay = 0.03,
+    Delay = 0.05,
 }
 
 local fovCircle = new("Frame", {
@@ -384,7 +389,6 @@ local function findTarget()
     return best
 end
 
--- LOOP: подсветка цели (без аимбота — просто highlight + "!")
 RunService.RenderStepped:Connect(function()
     if not SilentAim.Enabled then
         if FovGui.Enabled then FovGui.Enabled = false end
@@ -564,49 +568,45 @@ local function refreshAllHitboxViews()
 end
 
 --=============================================================
--- ESP
+-- ESP — контурная подсветка (Highlight), без ников
 --=============================================================
-local function makeNameGui(plr, color)
-    local bg = new("BillboardGui", {
-        Size = UDim2.new(0, 120, 0, 18),
-        StudsOffset = Vector3.new(0, 3.4, 0),
-        AlwaysOnTop = true,
-        LightInfluence = 0,
-        ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
-        Name = "MerediosESPName",
-    })
-    local lbl = new("TextLabel", {
-        Size = UDim2.new(1, 0, 1, 0),
-        BackgroundTransparency = 1,
-        Text = plr.Name,
-        TextColor3 = color or Color3.fromRGB(255, 60, 60),
-        Font = Enum.Font.GothamBold,
-        TextScaled = true,
-        TextStrokeTransparency = 0.3,
-        TextStrokeColor3 = Color3.fromRGB(0, 0, 0),
-    })
-    lbl.Parent = bg
-    return bg, lbl
+local function createESPHighlight(char)
+    if not char then return nil end
+    local existing = char:FindFirstChild("MerediosESP")
+    if existing then existing:Destroy() end
+    local h = Instance.new("Highlight")
+    h.Name = "MerediosESP"
+    h.FillColor = ESP.Color
+    h.FillTransparency = 0.75
+    h.OutlineColor = ESP.Color
+    h.OutlineTransparency = 0
+    h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+    h.Parent = char
+    return h
+end
+
+local function removeESPFromChar(char)
+    if not char then return end
+    local h = char:FindFirstChild("MerediosESP")
+    if h then pcall(function() h:Destroy() end) end
 end
 
 local function updateESPForPlayer(plr)
-    if ESP.Guis[plr] then
-        pcall(function() ESP.Guis[plr]:Destroy() end)
-        ESP.Guis[plr] = nil
+    if ESP.Highlights[plr] then
+        pcall(function() ESP.Highlights[plr]:Destroy() end)
+        ESP.Highlights[plr] = nil
     end
     if not ESP.Enabled or plr == LP then return end
     local char = plr.Character
     if not char then return end
-    local head = char:FindFirstChild("Head")
-    if not head then return end
-    local bg = makeNameGui(plr, ESP.Color)
-    bg.Adornee = head
-    bg.Parent = EspGui
-    ESP.Guis[plr] = bg
+    local h = createESPHighlight(char)
+    if h then ESP.Highlights[plr] = h end
 end
 
 local function refreshAllESP()
-    for _, plr in ipairs(Players:GetPlayers()) do updateESPForPlayer(plr) end
+    for _, plr in ipairs(Players:GetPlayers()) do
+        updateESPForPlayer(plr)
+    end
 end
 
 local function hookPlayerForCombat(plr)
@@ -615,6 +615,9 @@ local function hookPlayerForCombat(plr)
         if HitboxChanger.Enabled then applyHitboxToChar(char) end
         if HitboxChanger.View then applyHitboxViewToChar(char) end
         if ESP.Enabled then updateESPForPlayer(plr) end
+    end)
+    plr.CharacterRemoving:Connect(function(char)
+        removeESPFromChar(char)
     end)
 end
 
@@ -625,14 +628,14 @@ Players.PlayerAdded:Connect(function(plr)
     if plr ~= LP then hookPlayerForCombat(plr) end
 end)
 Players.PlayerRemoving:Connect(function(plr)
-    if ESP.Guis[plr] then
-        pcall(function() ESP.Guis[plr]:Destroy() end)
-        ESP.Guis[plr] = nil
+    if ESP.Highlights[plr] then
+        pcall(function() ESP.Highlights[plr]:Destroy() end)
+        ESP.Highlights[plr] = nil
     end
 end)
 
 --=============================================================
--- ХУК __namecall — LOG + RAPID FIRE
+-- ХУК __namecall — LOG + RAPID FIRE (WeaponHit)
 --=============================================================
 local hooked = false
 
@@ -662,7 +665,7 @@ local function installHook()
                 return oldNC(self, ...)
             end
 
-            local args = { ... }
+            local args = table.pack(...)
             local fullName = "?"
             pcall(function()
                 if typeof(self) == "Instance" then fullName = self:GetFullName() else fullName = tostring(self) end
@@ -671,23 +674,21 @@ local function installHook()
             local skipLog = IGNORE_REMOTES[shortName] == true
 
             if not skipLog then
-                logServer(method .. " → " .. shortRemoteName(fullName) .. " (" .. summarizeArgs(args) .. ")")
+                logServer(method .. " → " .. shortRemoteName(fullName) .. " (" .. summarizeArgs(args, args.n) .. ")")
             end
 
-            -- RAPID FIRE
-            if RapidFire.Enabled and shortName == "WeaponFired" then
-                local mainResult = oldNC(self, table.unpack(args))
-
-                local extra = math.clamp(RapidFire.Multiplier - 1, 0, 9)
+            -- RAPID FIRE: дублируем WeaponHit (реальный урон)
+            if RapidFire.Enabled and shortName == "WeaponHit" then
+                local mainResult = oldNC(self, table.unpack(args, 1, args.n))
+                local extra = math.clamp(RapidFire.Multiplier - 1, 0, 15)
                 for i = 1, extra do
                     task.spawn(function()
                         task.wait(RapidFire.Delay * i)
                         pcall(function()
-                            oldNC(self, table.unpack(args))
+                            oldNC(self, table.unpack(args, 1, args.n))
                         end)
                     end)
                 end
-
                 return mainResult
             end
 
@@ -781,7 +782,7 @@ local subBrand = new("TextLabel", {
     BackgroundTransparency = 1,
     Position = UDim2.new(0, 16, 0, 24),
     Size = UDim2.new(0, 300, 0, 12),
-    Text = "оперативный контур // v5.9",
+    Text = "оперативный контур // v6.1",
     TextColor3 = P.SubText, Font = Enum.Font.Gotham,
     TextSize = 9, TextXAlignment = Enum.TextXAlignment.Left,
 })
@@ -1196,7 +1197,7 @@ local combatList = new("UIListLayout", {
 })
 combatList.Parent = combatPage
 
--- HIGHLIGHT (было Slient Aim — теперь только подсветка цели и "!")
+-- TARGET HIGHLIGHT
 do
     local card = makeCard(combatPage, 1, "TARGET HIGHLIGHT")
 
@@ -1312,7 +1313,7 @@ do
 
     box.FocusLost:Connect(function()
         local n = tonumber(box.Text)
-        if n then RapidFire.Multiplier = math.clamp(math.floor(n), 1, 10) end
+        if n then RapidFire.Multiplier = math.clamp(math.floor(n), 1, 15) end
         box.Text = tostring(RapidFire.Multiplier)
         logScript("Rapid Fire multiplier = " .. tostring(RapidFire.Multiplier))
     end)
@@ -1323,7 +1324,7 @@ do
     end)
 end
 
--- ESP
+-- ESP (Highlight)
 do
     local card = makeCard(combatPage, 4, "ESP")
     makeSwitch(card, 36, function(v)
@@ -1639,7 +1640,7 @@ end)
 local saPanel = new("CanvasGroup", {
     AnchorPoint = Vector2.new(0.5, 0.5),
     Position = UDim2.new(0.7, 0, 0.5, 0),
-    Size = UDim2.new(0, 240, 0, 240),
+    Size = UDim2.new(0, 240, 0, 160),
     BackgroundColor3 = P.BgGlass, BackgroundTransparency = 0.04,
     BorderSizePixel = 0, Visible = false, GroupTransparency = 1, ZIndex = 20,
 })
@@ -1869,92 +1870,6 @@ for i, c in ipairs(ColorOptions) do
         end
     end)
 end
-
-local visRow = new("Frame", {
-    Position = UDim2.new(0, 14, 0, 132),
-    Size = UDim2.new(1, -28, 0, 18),
-    BackgroundTransparency = 1, ZIndex = 21,
-})
-visRow.Parent = saPanel
-
-local visLbl = new("TextLabel", {
-    BackgroundTransparency = 1,
-    Size = UDim2.new(0, 84, 1, 0),
-    Text = "VISIBLE ONLY", TextColor3 = P.SubText,
-    Font = Enum.Font.GothamMedium, TextSize = 9,
-    TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 21,
-})
-visLbl.Parent = visRow
-reg(visLbl, "TextColor3", "SubText")
-
-local visHolder = new("Frame", {
-    Position = UDim2.new(1, -88, 0.5, 0), AnchorPoint = Vector2.new(0, 0.5),
-    Size = UDim2.new(0, 38, 0, 17), BackgroundTransparency = 1, ZIndex = 21,
-})
-visHolder.Parent = visRow
-
-local visTrack = new("Frame", {
-    Size = UDim2.new(0, 38, 0, 17),
-    Position = UDim2.new(0, 0, 0, 0),
-    BackgroundColor3 = P.Track, BorderSizePixel = 0,
-})
-round(visTrack, 8.5); visTrack.Parent = visHolder
-local visKnob = new("Frame", {
-    Size = UDim2.new(0, 13, 0, 13),
-    Position = UDim2.new(0, 2, 0.5, 0),
-    AnchorPoint = Vector2.new(0, 0.5),
-    BackgroundColor3 = P.Knob, BorderSizePixel = 0, ZIndex = 3,
-})
-round(visKnob, 6.5); visKnob.Parent = visTrack
-local visState = false
-local visBtn = new("TextButton", { Size = UDim2.new(1,0,1,0), BackgroundTransparency = 1, Text = "" })
-visBtn.Parent = visTrack
-visBtn.MouseButton1Click:Connect(function()
-    visState = not visState
-    tween(visKnob, 0.22, { Position = visState and UDim2.new(1, -2, 0.5, 0) or UDim2.new(0, 2, 0.5, 0) })
-    tween(visTrack, 0.22, { BackgroundColor3 = visState and Accent.Main or P.Track })
-    SilentAim.VisibleOnly = visState
-end)
-
-local teamLbl = new("TextLabel", {
-    BackgroundTransparency = 1,
-    Position = UDim2.new(1, -46, 0.5, 0), AnchorPoint = Vector2.new(0, 0.5),
-    Size = UDim2.new(0, 42, 1, 0),
-    Text = "TEAM", TextColor3 = P.SubText,
-    Font = Enum.Font.GothamMedium, TextSize = 9,
-    TextXAlignment = Enum.TextXAlignment.Right, ZIndex = 21,
-})
-teamLbl.Parent = visRow
-reg(teamLbl, "TextColor3", "SubText")
-
-local teamHolder = new("Frame", {
-    Position = UDim2.new(1, -40, 0.5, 0), AnchorPoint = Vector2.new(0, 0.5),
-    Size = UDim2.new(0, 38, 0, 17), BackgroundTransparency = 1, ZIndex = 21,
-})
-teamHolder.Parent = visRow
-
-local teamTrack = new("Frame", {
-    Size = UDim2.new(0, 38, 0, 17),
-    Position = UDim2.new(0, 0, 0, 0),
-    BackgroundColor3 = Accent.Main, BorderSizePixel = 0,
-})
-round(teamTrack, 8.5); teamTrack.Parent = teamHolder
-local teamKnob = new("Frame", {
-    Size = UDim2.new(0, 13, 0, 13),
-    Position = UDim2.new(1, -2, 0.5, 0),
-    AnchorPoint = Vector2.new(0, 0.5),
-    BackgroundColor3 = P.Knob, BorderSizePixel = 0, ZIndex = 3,
-})
-round(teamKnob, 6.5); teamKnob.Parent = teamTrack
-local teamState = true
-local teamBtn = new("TextButton", { Size = UDim2.new(1,0,1,0), BackgroundTransparency = 1, Text = "" })
-teamBtn.Parent = teamTrack
-teamBtn.MouseButton1Click:Connect(function()
-    teamState = not teamState
-    tween(teamKnob, 0.22, { Position = teamState and UDim2.new(1, -2, 0.5, 0) or UDim2.new(0, 2, 0.5, 0) })
-    tween(teamTrack, 0.22, { BackgroundColor3 = teamState and Accent.Main or P.Track })
-    SilentAim.TeamCheck = teamState
-end)
 
 function _G.MerediosOpenSASettings()
     saPanel.Visible = true
