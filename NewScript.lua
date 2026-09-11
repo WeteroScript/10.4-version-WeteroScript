@@ -1,5 +1,5 @@
 --[[
-    MEREDIOS v5.6 — оперативный контур
+    MEREDIOS v5.9 — оперативный контур
     Roblox / Delta X Mobile
 --]]
 
@@ -132,9 +132,6 @@ local P, Accent
 local function refreshPalettes() P = Palettes[Theme.mode]; Accent = Accents[Theme.accent] end
 refreshPalettes()
 
---=============================================================
--- ХЕЛПЕРЫ
---=============================================================
 local function new(class, props)
     local o = Instance.new(class)
     if props then for k, v in pairs(props) do o[k] = v end end
@@ -227,9 +224,7 @@ local function logLine(channel, text)
     local t = os.date("%H:%M:%S")
     table.insert(buf, "[" .. t .. "] " .. text)
     while #buf > Logger.maxLen do table.remove(buf, 1) end
-    for _, cb in ipairs(Logger.listeners) do
-        pcall(cb, channel)
-    end
+    for _, cb in ipairs(Logger.listeners) do pcall(cb, channel) end
 end
 
 local function logScript(text) logLine("script", text) end
@@ -241,9 +236,7 @@ local function shortRemoteName(fullName)
     if #last < 3 then
         local parts = {}
         for p in fullName:gmatch("[^%.]+") do table.insert(parts, p) end
-        if #parts >= 2 then
-            last = parts[#parts - 1] .. "." .. parts[#parts]
-        end
+        if #parts >= 2 then last = parts[#parts - 1] .. "." .. parts[#parts] end
     end
     return last
 end
@@ -251,27 +244,18 @@ end
 local function describeValue(v, depth)
     depth = depth or 1
     local t = typeof(v)
-    if t == "string" then
-        return '"' .. v .. '"'
-    elseif t == "Instance" then
-        return v.Name
-    elseif t == "Vector3" then
-        return string.format("V3(%.1f,%.1f,%.1f)", v.X, v.Y, v.Z)
-    elseif t == "CFrame" then
-        local p = v.Position
-        return string.format("CF(%.1f,%.1f,%.1f)", p.X, p.Y, p.Z)
-    elseif t == "number" then
-        return string.format("%g", v)
-    elseif t == "boolean" then
-        return tostring(v)
+    if t == "string" then return '"' .. v .. '"'
+    elseif t == "Instance" then return v.Name
+    elseif t == "Vector3" then return string.format("V3(%.1f,%.1f,%.1f)", v.X, v.Y, v.Z)
+    elseif t == "CFrame" then local p = v.Position; return string.format("CF(%.1f,%.1f,%.1f)", p.X, p.Y, p.Z)
+    elseif t == "number" then return string.format("%g", v)
+    elseif t == "boolean" then return tostring(v)
     elseif t == "table" and depth <= 4 then
-        local sub = {}
-        local count = 0
+        local sub = {}; local count = 0
         for k, sv in pairs(v) do
             count = count + 1
             if count > 6 then sub[#sub + 1] = "…"; break end
-            local keyStr = tostring(k)
-            sub[#sub + 1] = keyStr .. ":" .. describeValue(sv, depth + 1)
+            sub[#sub + 1] = tostring(k) .. ":" .. describeValue(sv, depth + 1)
         end
         return "{" .. table.concat(sub, ", ") .. "}"
     end
@@ -280,25 +264,34 @@ end
 
 local function summarizeArgs(args)
     local parts = {}
-    for i = 1, math.min(#args, 6) do
-        parts[i] = describeValue(args[i], 1)
-    end
+    for i = 1, math.min(#args, 6) do parts[i] = describeValue(args[i], 1) end
     if #args > 6 then parts[#parts + 1] = "…+" .. (#args - 6) end
     return table.concat(parts, ", ")
 end
 
 --=============================================================
--- SILENT AIM
+-- ESP (без "!") + HIGHLIGHT для цели
 --=============================================================
 local SilentAim = {
-    Enabled=false, FOV=150, Target="Closest", VisibleOnly=false,
-    TeamCheck=true, Smoothness=0.15, HitChance=100,
-    CircleColor=Color3.fromRGB(0,210,255), Current=nil, Highlight=nil,
-    Headshot = true,
-    CameraLock = true,
+    Enabled = false,
+    FOV = 150,
+    CircleColor = Color3.fromRGB(0, 210, 255),
+    Current = nil,
+    Highlight = nil,
+    VisibleOnly = false,
+    TeamCheck = true,
 }
 
 local ESP = { Enabled = false, Color = Color3.fromRGB(255, 60, 60), Guis = {} }
+
+--=============================================================
+-- RAPID FIRE
+--=============================================================
+local RapidFire = {
+    Enabled = false,
+    Multiplier = 5,
+    Delay = 0.03,
+}
 
 local fovCircle = new("Frame", {
     AnchorPoint = Vector2.new(0.5, 0.5),
@@ -368,11 +361,6 @@ local function getAimPart(char)
         or char:FindFirstChild("Torso")
 end
 
-local function getHeadPart(char)
-    if not char then return nil end
-    return char:FindFirstChild("Head")
-end
-
 local function findTarget()
     local best, bestDist = nil, math.huge
     local vp = Cam.ViewportSize
@@ -396,236 +384,32 @@ local function findTarget()
     return best
 end
 
---=============================================================
--- CAMERA LOCK
---=============================================================
-local camLockUntil = 0
-
-local function triggerCamLock()
-    if not SilentAim.CameraLock then return end
-    camLockUntil = os.clock() + 0.06
-end
-
+-- LOOP: подсветка цели (без аимбота — просто highlight + "!")
 RunService.RenderStepped:Connect(function()
-    if not SilentAim.CameraLock then return end
-    if not SilentAim.Enabled or not SilentAim.Current then return end
-    if os.clock() >= camLockUntil then return end
-
-    local aimPart = getHeadPart(SilentAim.Current.Character)
-    if aimPart then
-        local fromPos = Cam.CFrame.Position
-        local toPos = aimPart.Position
-        Cam.CFrame = CFrame.lookAt(fromPos, toPos)
-    end
-end)
-
---=============================================================
--- ХУК __namecall — ТОЧЕЧНЫЙ ПОД FORTLINE
---=============================================================
-local hooked = false
-local lastOrigin = nil
-
-local IGNORE_REMOTES = {
-    ClientLogging = true,
-    LeaderboardEvent = true,
-    PingData = true,
-}
-
-local function findField(tbl, fieldName, depth)
-    depth = depth or 1
-    if depth > 3 then return nil end
-    if typeof(tbl) ~= "table" then return nil end
-    if tbl[fieldName] ~= nil then return tbl[fieldName] end
-    for _, v in pairs(tbl) do
-        if typeof(v) == "table" then
-            local r = findField(v, fieldName, depth + 1)
-            if r ~= nil then return r end
-        end
-    end
-    return nil
-end
-
-local function setField(tbl, fieldName, value, depth)
-    depth = depth or 1
-    if depth > 3 then return false end
-    if typeof(tbl) ~= "table" then return false end
-    if tbl[fieldName] ~= nil then
-        tbl[fieldName] = value
-        return true
-    end
-    for _, v in pairs(tbl) do
-        if typeof(v) == "table" then
-            if setField(v, fieldName, value, depth + 1) then return true end
-        end
-    end
-    return false
-end
-
-local function rewriteValue(v, targetPos, camPos, depth)
-    depth = depth or 1
-    if depth > 4 then return v, false end
-    local vt = typeof(v)
-    if vt == "Vector3" then
-        local mag = v.Magnitude
-        if mag > 30 then
-            return targetPos, true
-        elseif mag > 0.01 then
-            return (targetPos - camPos).Unit * mag, true
-        end
-        return v, false
-    elseif vt == "CFrame" then
-        return CFrame.lookAt(camPos, targetPos), true
-    elseif vt == "table" then
-        local modified = false
-        for k, sub in pairs(v) do
-            local nv, ch = rewriteValue(sub, targetPos, camPos, depth + 1)
-            if ch then v[k] = nv; modified = true end
-        end
-        return v, modified
-    end
-    return v, false
-end
-
-local function handleFortlineRemote(shortName, args, targetPos, camPos)
-    local modified = false
-
-    if shortName == "WeaponFired" then
-        for i = 1, #args do
-            local a = args[i]
-            if typeof(a) == "table" then
-                local origin = findField(a, "origin")
-                if typeof(origin) == "Vector3" then
-                    lastOrigin = origin
-                end
-                local dir = findField(a, "dir") or findField(a, "direction")
-                if typeof(dir) == "Vector3" then
-                    local fromOrigin = (typeof(origin) == "Vector3") and origin or camPos
-                    local newDir = (targetPos - fromOrigin).Unit
-                    if setField(a, "dir", newDir) then modified = true end
-                    if setField(a, "direction", newDir) then modified = true end
-                    triggerCamLock()
-                end
-            end
-        end
-    elseif shortName == "WeaponHit" then
-        local targetPlr = SilentAim.Current
-        for i = 1, #args do
-            local a = args[i]
-            if typeof(a) == "table" then
-                local aimPart = targetPlr and getHeadPart(targetPlr.Character)
-                local hitPos = aimPart and aimPart.Position or targetPos
-                if setField(a, "p", hitPos) then modified = true end
-                if setField(a, "pos", hitPos) then modified = true end
-                if setField(a, "position", hitPos) then modified = true end
-
-                if SilentAim.Headshot then
-                    if setField(a, "part", "Head") then modified = true end
-                end
-
-                -- pid → UserId цели
-                if targetPlr then
-                    if setField(a, "pid", targetPlr.UserId) then modified = true end
-                end
-
-                -- d пересчитываем от origin последнего выстрела
-                if lastOrigin then
-                    local newD = (hitPos - lastOrigin).Magnitude
-                    if setField(a, "d", newD) then modified = true end
-                end
-            end
-        end
-    end
-
-    return modified
-end
-
-local function installHook()
-    if hooked then return end
-    if type(hookmetamethod) ~= "function"
-        or type(getnamecallmethod) ~= "function" then return end
-    hooked = true
-
-    local wrapper
-    if type(newcclosure) == "function" then
-        wrapper = newcclosure
-    else
-        wrapper = function(f) return f end
-    end
-
-    local ok = pcall(function()
-        local oldNC
-        oldNC = hookmetamethod(game, "__namecall", wrapper(function(self, ...)
-            local method = getnamecallmethod()
-            local isRemote = (method == "FireServer" or method == "InvokeServer"
-                              or method == "Fire" or method == "Invoke")
-
-            if isRemote then
-                local args = { ... }
-
-                local fullName = "?"
-                pcall(function()
-                    if typeof(self) == "Instance" then fullName = self:GetFullName() else fullName = tostring(self) end
-                end)
-                local shortName = fullName:match("([^%.]+)$") or fullName
-                local skipLog = IGNORE_REMOTES[shortName] == true
-
-                if not skipLog then
-                    logServer(method .. " → " .. shortRemoteName(fullName) .. " (" .. summarizeArgs(args) .. ")")
-                end
-
-                if SilentAim.Enabled and SilentAim.Current then
-                    local tChar = SilentAim.Current.Character
-                    local aimPart = getAimPart(tChar)
-                    if aimPart and math.random(1, 100) <= SilentAim.HitChance then
-                        local targetPos = aimPart.Position
-                        local camPos = Cam.CFrame.Position
-                        local modified = false
-
-                        if shortName == "WeaponFired" or shortName == "WeaponHit" then
-                            modified = handleFortlineRemote(shortName, args, targetPos, camPos)
-                        else
-                            for i = 1, #args do
-                                local nv, ch = rewriteValue(args[i], targetPos, camPos, 1)
-                                if ch then args[i] = nv; modified = true end
-                            end
-                        end
-
-                        if modified then
-                            return oldNC(self, table.unpack(args))
-                        end
-                    end
-                end
-            end
-            return oldNC(self, ...)
-        end))
-    end)
-    if not ok then hooked = false end
-end
-pcall(installHook)
-
-RunService.RenderStepped:Connect(function()
-    if SilentAim.Enabled then
-        FovGui.Enabled = true
-        local target = findTarget()
-        if target and target.Character then
-            SilentAim.Current = target
-            local hl = ensureHighlight()
-            if hl.Parent ~= target.Character then hl.Parent = target.Character end
-            hl.FillColor = SilentAim.CircleColor
-            hl.OutlineColor = SilentAim.CircleColor
-
-            local head = target.Character:FindFirstChild("Head")
-            if head then
-                silentBangGui.Adornee = head
-                silentBangGui.Enabled = true
-                silentBangLabel.TextColor3 = SilentAim.CircleColor
-            end
-        else
-            clearTarget()
-        end
-    else
+    if not SilentAim.Enabled then
         if FovGui.Enabled then FovGui.Enabled = false end
         if SilentAim.Current then clearTarget() end
+        return
+    end
+
+    FovGui.Enabled = true
+    local target = findTarget()
+
+    if target and target.Character then
+        SilentAim.Current = target
+        local hl = ensureHighlight()
+        if hl.Parent ~= target.Character then hl.Parent = target.Character end
+        hl.FillColor = SilentAim.CircleColor
+        hl.OutlineColor = SilentAim.CircleColor
+
+        local head = target.Character:FindFirstChild("Head")
+        if head then
+            silentBangGui.Adornee = head
+            silentBangGui.Enabled = true
+            silentBangLabel.TextColor3 = SilentAim.CircleColor
+        end
+    else
+        clearTarget()
     end
 end)
 
@@ -747,9 +531,7 @@ end
 local function removeHitboxViewFromChar(char)
     if not char then return end
     for _, d in ipairs(char:GetDescendants()) do
-        if d.Name == "MerediosHitboxView" then
-            pcall(function() d:Destroy() end)
-        end
+        if d.Name == "MerediosHitboxView" then pcall(function() d:Destroy() end) end
     end
 end
 
@@ -824,9 +606,7 @@ local function updateESPForPlayer(plr)
 end
 
 local function refreshAllESP()
-    for _, plr in ipairs(Players:GetPlayers()) do
-        updateESPForPlayer(plr)
-    end
+    for _, plr in ipairs(Players:GetPlayers()) do updateESPForPlayer(plr) end
 end
 
 local function hookPlayerForCombat(plr)
@@ -850,6 +630,73 @@ Players.PlayerRemoving:Connect(function(plr)
         ESP.Guis[plr] = nil
     end
 end)
+
+--=============================================================
+-- ХУК __namecall — LOG + RAPID FIRE
+--=============================================================
+local hooked = false
+
+local IGNORE_REMOTES = {
+    ClientLogging = true,
+    LeaderboardEvent = true,
+    PingData = true,
+}
+
+local function installHook()
+    if hooked then return end
+    if type(hookmetamethod) ~= "function" or type(getnamecallmethod) ~= "function" then return end
+    hooked = true
+
+    local wrapper
+    if type(newcclosure) == "function" then wrapper = newcclosure
+    else wrapper = function(f) return f end end
+
+    local ok = pcall(function()
+        local oldNC
+        oldNC = hookmetamethod(game, "__namecall", wrapper(function(self, ...)
+            local method = getnamecallmethod()
+            local isRemote = (method == "FireServer" or method == "InvokeServer"
+                              or method == "Fire" or method == "Invoke")
+
+            if not isRemote then
+                return oldNC(self, ...)
+            end
+
+            local args = { ... }
+            local fullName = "?"
+            pcall(function()
+                if typeof(self) == "Instance" then fullName = self:GetFullName() else fullName = tostring(self) end
+            end)
+            local shortName = fullName:match("([^%.]+)$") or fullName
+            local skipLog = IGNORE_REMOTES[shortName] == true
+
+            if not skipLog then
+                logServer(method .. " → " .. shortRemoteName(fullName) .. " (" .. summarizeArgs(args) .. ")")
+            end
+
+            -- RAPID FIRE
+            if RapidFire.Enabled and shortName == "WeaponFired" then
+                local mainResult = oldNC(self, table.unpack(args))
+
+                local extra = math.clamp(RapidFire.Multiplier - 1, 0, 9)
+                for i = 1, extra do
+                    task.spawn(function()
+                        task.wait(RapidFire.Delay * i)
+                        pcall(function()
+                            oldNC(self, table.unpack(args))
+                        end)
+                    end)
+                end
+
+                return mainResult
+            end
+
+            return oldNC(self, ...)
+        end))
+    end)
+    if not ok then hooked = false end
+end
+pcall(installHook)
 
 --=============================================================
 -- STARTUP
@@ -934,7 +781,7 @@ local subBrand = new("TextLabel", {
     BackgroundTransparency = 1,
     Position = UDim2.new(0, 16, 0, 24),
     Size = UDim2.new(0, 300, 0, 12),
-    Text = "оперативный контур // v5.6",
+    Text = "оперативный контур // v5.9",
     TextColor3 = P.SubText, Font = Enum.Font.Gotham,
     TextSize = 9, TextXAlignment = Enum.TextXAlignment.Left,
 })
@@ -970,9 +817,7 @@ round(closeBtn, 8); closeBtn.Parent = rightBox
 reg(closeBtn, "BackgroundColor3", "Card")
 reg(closeBtn, "TextColor3", "Text")
 
-dragify(menu, topBar, function()
-    return not (_G.MerediosSettingsOpen == true)
-end)
+dragify(menu, topBar, function() return not (_G.MerediosSettingsOpen == true) end)
 
 local tabBar = new("ScrollingFrame", {
     Position = UDim2.new(0, 10, 0, 52),
@@ -1207,8 +1052,7 @@ logPage.ScrollingEnabled = false
 local logViewport = new("Frame", {
     Position = UDim2.new(0, 0, 0, 0),
     Size = UDim2.new(1, 0, 1, -32),
-    BackgroundColor3 = P.Card,
-    BackgroundTransparency = 0.06,
+    BackgroundColor3 = P.Card, BackgroundTransparency = 0.06,
     BorderSizePixel = 0,
 })
 round(logViewport, 10)
@@ -1219,8 +1063,7 @@ reg(logViewport, "BackgroundColor3", "Card")
 local logScroll = new("ScrollingFrame", {
     Position = UDim2.new(0, 8, 0, 8),
     Size = UDim2.new(1, -16, 1, -16),
-    BackgroundTransparency = 1,
-    BorderSizePixel = 0,
+    BackgroundTransparency = 1, BorderSizePixel = 0,
     ScrollBarThickness = 3,
     ScrollBarImageColor3 = Accent.Main,
     ScrollBarImageTransparency = 0.4,
@@ -1353,8 +1196,9 @@ local combatList = new("UIListLayout", {
 })
 combatList.Parent = combatPage
 
+-- HIGHLIGHT (было Slient Aim — теперь только подсветка цели и "!")
 do
-    local card = makeCard(combatPage, 1, "Slient Aim")
+    local card = makeCard(combatPage, 1, "TARGET HIGHLIGHT")
 
     local gear = new("TextButton", {
         Position = UDim2.new(1, -112, 0, 38),
@@ -1369,7 +1213,7 @@ do
 
     makeSwitch(card, 36, function(v)
         SilentAim.Enabled = v
-        logScript("Slient Aim " .. (v and "ENABLED" or "DISABLED"))
+        logScript("Target Highlight " .. (v and "ENABLED" or "DISABLED"))
         if v then
             gear.Visible = true
             gear.BackgroundTransparency = 1
@@ -1385,6 +1229,7 @@ do
     end)
 end
 
+-- HITBOX
 do
     local card = makeCard(combatPage, 2, "HITBOX CHANGER")
 
@@ -1408,9 +1253,7 @@ do
                 restoreAllHitboxes()
                 applyAllHitboxes()
             end
-            if HitboxChanger.View then
-                refreshAllHitboxViews()
-            end
+            if HitboxChanger.View then refreshAllHitboxViews() end
             logScript("Hitbox size set to " .. tostring(HitboxChanger.Size))
         end
         box.Text = tostring(HitboxChanger.Size)
@@ -1451,8 +1294,38 @@ do
     viewBtn.MouseButton1Click:Connect(function() setView(not viewState) end)
 end
 
+-- RAPID FIRE
 do
-    local card = makeCard(combatPage, 3, "ESP")
+    local card = makeCard(combatPage, 3, "RAPID FIRE")
+
+    local box = new("TextBox", {
+        Position = UDim2.new(0, 12, 0, 36),
+        Size = UDim2.new(0, 60, 0, 22),
+        BackgroundColor3 = P.Bg, BackgroundTransparency = 0.4,
+        Text = tostring(RapidFire.Multiplier), TextColor3 = P.Text,
+        Font = Enum.Font.GothamMedium, TextSize = 12,
+        BorderSizePixel = 0, ClearTextOnFocus = false, TextEditable = true,
+    })
+    round(box, 6); box.Parent = card
+    reg(box, "BackgroundColor3", "Bg")
+    reg(box, "TextColor3", "Text")
+
+    box.FocusLost:Connect(function()
+        local n = tonumber(box.Text)
+        if n then RapidFire.Multiplier = math.clamp(math.floor(n), 1, 10) end
+        box.Text = tostring(RapidFire.Multiplier)
+        logScript("Rapid Fire multiplier = " .. tostring(RapidFire.Multiplier))
+    end)
+
+    makeSwitch(card, 36, function(v)
+        RapidFire.Enabled = v
+        logScript("Rapid Fire " .. (v and "ENABLED" or "DISABLED"))
+    end)
+end
+
+-- ESP
+do
+    local card = makeCard(combatPage, 4, "ESP")
     makeSwitch(card, 36, function(v)
         ESP.Enabled = v
         refreshAllESP()
@@ -1761,7 +1634,7 @@ sClose.MouseButton1Click:Connect(function()
 end)
 
 --=============================================================
--- SILENT AIM PANEL
+-- HIGHLIGHT PANEL
 --=============================================================
 local saPanel = new("CanvasGroup", {
     AnchorPoint = Vector2.new(0.5, 0.5),
@@ -1779,7 +1652,7 @@ local saTitle = new("TextLabel", {
     BackgroundTransparency = 1,
     Position = UDim2.new(0, 14, 0, 10),
     Size = UDim2.new(1, -55, 0, 16),
-    Text = "SILENT AIM", TextColor3 = P.Text,
+    Text = "TARGET HIGHLIGHT", TextColor3 = P.Text,
     Font = Enum.Font.GothamBold, TextSize = 11,
     TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 21,
 })
@@ -1946,19 +1819,9 @@ makeSlider(saHolder(56), 20, 400, SilentAim.FOV,
 )
 fovCircle.Size = UDim2.new(0, SilentAim.FOV * 2, 0, SilentAim.FOV * 2)
 
-saLabel(82, "HIT CHANCE %")
-makeSlider(saHolder(98), 0, 100, SilentAim.HitChance, function(v)
-    SilentAim.HitChance = v
-end)
-
-saLabel(124, "SMOOTHNESS")
-makeSlider(saHolder(140), 0, 100, math.floor(SilentAim.Smoothness * 100), function(v)
-    SilentAim.Smoothness = v / 100
-end)
-
-saLabel(166, "CIRCLE COLOR")
+saLabel(82, "CIRCLE COLOR")
 local colorRow = new("Frame", {
-    Position = UDim2.new(0, 14, 0, 182),
+    Position = UDim2.new(0, 14, 0, 98),
     Size = UDim2.new(1, -28, 0, 20),
     BackgroundTransparency = 1, ZIndex = 21,
 })
@@ -2008,7 +1871,7 @@ for i, c in ipairs(ColorOptions) do
 end
 
 local visRow = new("Frame", {
-    Position = UDim2.new(0, 14, 0, 210),
+    Position = UDim2.new(0, 14, 0, 132),
     Size = UDim2.new(1, -28, 0, 18),
     BackgroundTransparency = 1, ZIndex = 21,
 })
