@@ -1,5 +1,5 @@
 --[[
-    MEREDIOS v5.4 — оперативный контур
+    MEREDIOS v5.5 — оперативный контур
     Roblox / Delta X Mobile
 --]]
 
@@ -399,7 +399,7 @@ end
 -- ХУК __namecall — ТОЧЕЧНЫЙ ПОД FORTLINE
 --=============================================================
 local hooked = false
-local lastOrigin = nil   -- origin из последнего WeaponFired
+local lastOrigin = nil
 
 local IGNORE_REMOTES = {
     ClientLogging = true,
@@ -407,12 +407,11 @@ local IGNORE_REMOTES = {
     PingData = true,
 }
 
--- найти поле в таблице по имени (recursive, до 3 уровней)
 local function findField(tbl, fieldName, depth)
     depth = depth or 1
     if depth > 3 then return nil end
     if typeof(tbl) ~= "table" then return nil end
-    if tbl[fieldName] then return tbl[fieldName] end
+    if tbl[fieldName] ~= nil then return tbl[fieldName] end
     for _, v in pairs(tbl) do
         if typeof(v) == "table" then
             local r = findField(v, fieldName, depth + 1)
@@ -422,7 +421,6 @@ local function findField(tbl, fieldName, depth)
     return nil
 end
 
--- установить поле в таблице (recursive)
 local function setField(tbl, fieldName, value, depth)
     depth = depth or 1
     if depth > 3 then return false end
@@ -439,7 +437,6 @@ local function setField(tbl, fieldName, value, depth)
     return false
 end
 
--- generic fallback для прочих remote
 local function rewriteValue(v, targetPos, camPos, depth)
     depth = depth or 1
     if depth > 4 then return v, false end
@@ -465,7 +462,6 @@ local function rewriteValue(v, targetPos, camPos, depth)
     return v, false
 end
 
--- точечная обработка Fortline
 local function handleFortlineRemote(shortName, args, targetPos, camPos)
     local modified = false
 
@@ -473,12 +469,10 @@ local function handleFortlineRemote(shortName, args, targetPos, camPos)
         for i = 1, #args do
             local a = args[i]
             if typeof(a) == "table" then
-                -- сохранить origin для последующего WeaponHit
                 local origin = findField(a, "origin")
                 if typeof(origin) == "Vector3" then
                     lastOrigin = origin
                 end
-                -- заменить dir на unit к цели
                 local dir = findField(a, "dir") or findField(a, "direction")
                 if typeof(dir) == "Vector3" then
                     local fromOrigin = (typeof(origin) == "Vector3") and origin or camPos
@@ -492,23 +486,21 @@ local function handleFortlineRemote(shortName, args, targetPos, camPos)
         for i = 1, #args do
             local a = args[i]
             if typeof(a) == "table" then
-                -- p → позиция головы/цели
                 local aimPart = SilentAim.Current and getHeadPart(SilentAim.Current.Character)
                 local hitPos = aimPart and aimPart.Position or targetPos
                 if setField(a, "p", hitPos) then modified = true end
                 if setField(a, "pos", hitPos) then modified = true end
                 if setField(a, "position", hitPos) then modified = true end
 
-                -- part → "Head" для хедшота
                 if SilentAim.Headshot then
                     if setField(a, "part", "Head") then modified = true end
                 end
 
-                -- пересчёт d и maxDist от lastOrigin
+                -- maxDist НЕ трогаем — это лимит оружия, не дистанция попадания.
+                -- d пересчитываем от origin последнего выстрела.
                 if lastOrigin then
                     local newD = (hitPos - lastOrigin).Magnitude
                     if setField(a, "d", newD) then modified = true end
-                    if setField(a, "maxDist", newD) then modified = true end
                 end
             end
         end
@@ -912,7 +904,7 @@ local subBrand = new("TextLabel", {
     BackgroundTransparency = 1,
     Position = UDim2.new(0, 16, 0, 24),
     Size = UDim2.new(0, 300, 0, 12),
-    Text = "оперативный контур // v5.4",
+    Text = "оперативный контур // v5.5",
     TextColor3 = P.SubText, Font = Enum.Font.Gotham,
     TextSize = 9, TextXAlignment = Enum.TextXAlignment.Left,
 })
