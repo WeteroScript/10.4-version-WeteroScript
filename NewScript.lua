@@ -1,6 +1,7 @@
 --[[
-    MEREDIOS v6.5 — оперативный контур
+    MEREDIOS clean — минимальный контур
     Roblox / Delta X Mobile
+    без хуков, без remote, без slient aim
 --]]
 
 do
@@ -10,9 +11,7 @@ do
     for _, p in ipairs(targets) do
         if p then
             for _, g in ipairs(p:GetChildren()) do
-                if g.Name == "MerediosHUD" or g.Name == "MerediosESP" then
-                    pcall(function() g:Destroy() end)
-                end
+                if g.Name == "MerediosHUD" then pcall(function() g:Destroy() end) end
             end
         end
     end
@@ -64,14 +63,14 @@ local Palettes = {
         Card=Color3.fromRGB(255,255,255), CardEdge=Color3.fromRGB(225,230,240),
         Text=Color3.fromRGB(22,28,42), SubText=Color3.fromRGB(120,130,152),
         Track=Color3.fromRGB(205,212,226), Knob=Color3.fromRGB(255,255,255),
-        Divider=Color3.fromRGB(225,230,240), Shadow=Color3.fromRGB(0,0,0),
+        Divider=Color3.fromRGB(225,230,240),
     },
     Dark = {
         Bg=Color3.fromRGB(24,29,41), BgGlass=Color3.fromRGB(31,37,52),
         Card=Color3.fromRGB(38,45,62), CardEdge=Color3.fromRGB(58,68,88),
         Text=Color3.fromRGB(235,240,250), SubText=Color3.fromRGB(145,158,182),
         Track=Color3.fromRGB(60,70,92), Knob=Color3.fromRGB(255,255,255),
-        Divider=Color3.fromRGB(58,68,88), Shadow=Color3.fromRGB(0,0,0),
+        Divider=Color3.fromRGB(58,68,88),
     },
 }
 
@@ -165,66 +164,6 @@ local function applyTheme()
     end
 end
 
-local Logger = {
-    buffer = { server = {}, script = {} },
-    maxLen = 100,
-    listeners = {},
-    activeTab = "server",
-}
-
-local function logLine(channel, text)
-    local buf = Logger.buffer[channel]
-    if not buf then return end
-    local t = os.date("%H:%M:%S")
-    table.insert(buf, "[" .. t .. "] " .. text)
-    while #buf > Logger.maxLen do table.remove(buf, 1) end
-    for _, cb in ipairs(Logger.listeners) do pcall(cb, channel) end
-end
-
-local function logScript(text) logLine("script", text) end
-local function logServer(text) logLine("server", text) end
-
-local function shortRemoteName(fullName)
-    if not fullName then return "?" end
-    local last = fullName:match("([^%.]+)$") or fullName
-    if #last < 3 then
-        local parts = {}
-        for p in fullName:gmatch("[^%.]+") do table.insert(parts, p) end
-        if #parts >= 2 then last = parts[#parts - 1] .. "." .. parts[#parts] end
-    end
-    return last
-end
-
-local function describeValue(v, depth)
-    depth = depth or 1
-    local t = typeof(v)
-    if t == "string" then return '"' .. v .. '"'
-    elseif t == "Instance" then return v.Name
-    elseif t == "Vector3" then return string.format("V3(%.1f,%.1f,%.1f)", v.X, v.Y, v.Z)
-    elseif t == "CFrame" then local p = v.Position; return string.format("CF(%.1f,%.1f,%.1f)", p.X, p.Y, p.Z)
-    elseif t == "number" then return string.format("%g", v)
-    elseif t == "boolean" then return tostring(v)
-    elseif t == "table" and depth <= 4 then
-        local sub = {}; local count = 0
-        for k, sv in pairs(v) do
-            count = count + 1
-            if count > 6 then sub[#sub + 1] = "…"; break end
-            sub[#sub + 1] = tostring(k) .. ":" .. describeValue(sv, depth + 1)
-        end
-        return "{" .. table.concat(sub, ", ") .. "}"
-    end
-    return t
-end
-
-local function summarizeArgs(args, n)
-    local parts = {}
-    for i = 1, math.min(n or #args, 6) do
-        parts[i] = describeValue(args[i], 1)
-    end
-    if (n or #args) > 6 then parts[#parts + 1] = "…+" .. ((n or #args) - 6) end
-    return table.concat(parts, ", ")
-end
-
 --=============================================================
 -- HITBOX CHANGER
 --=============================================================
@@ -246,12 +185,11 @@ local function applyHitboxToChar(char)
     for _, part in ipairs(hitboxParts(char)) do
         if not HitboxChanger.Original[part] then
             HitboxChanger.Original[part] = {
-                Size = part.Size, Transparency = part.Transparency, CanCollide = part.CanCollide,
+                Size = part.Size, Transparency = part.Transparency,
             }
         end
         part.Size = Vector3.new(HitboxChanger.Size, HitboxChanger.Size, HitboxChanger.Size)
         part.Transparency = 1
-        part.CanCollide = false
     end
 end
 
@@ -262,7 +200,6 @@ local function restoreHitboxForChar(char)
             pcall(function()
                 part.Size = orig.Size
                 part.Transparency = orig.Transparency
-                part.CanCollide = orig.CanCollide
             end)
             HitboxChanger.Original[part] = nil
         end
@@ -413,12 +350,6 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
-local RapidFire = {
-    Enabled = false,
-    Multiplier = 5,
-    Delay = 0.05,
-}
-
 local function hookPlayerForCombat(plr)
     plr.CharacterAdded:Connect(function(char)
         task.wait(0.25)
@@ -443,86 +374,6 @@ Players.PlayerRemoving:Connect(function(plr)
         ESP.Highlights[plr] = nil
     end
 end)
-
---=============================================================
--- ХУК __namecall (без `...` во вложенных функциях)
---=============================================================
-local hooked = false
-
-local IGNORE_REMOTES = {
-    ClientLogging = true,
-    LeaderboardEvent = true,
-    PingData = true,
-}
-
-local function installHook()
-    if hooked then return end
-    if type(hookmetamethod) ~= "function" or type(getnamecallmethod) ~= "function" then return end
-    hooked = true
-
-    local wrapper
-    if type(newcclosure) == "function" then wrapper = newcclosure
-    else wrapper = function(f) return f end end
-
-    local ok = pcall(function()
-        local oldNC
-        oldNC = hookmetamethod(game, "__namecall", wrapper(function(self, ...)
-            -- фикс: захватываю varargs ДО вложенных функций
-            local n = select("#", ...)
-            local args = {...}
-            args.n = n
-
-            local method = getnamecallmethod()
-            if not method then return oldNC(self, ...) end
-
-            local isRemote = (method == "FireServer" or method == "InvokeServer"
-                              or method == "Fire" or method == "Invoke")
-
-            if isRemote then
-                local fullName = "?"
-                pcall(function()
-                    if typeof(self) == "Instance" then
-                        fullName = self:GetFullName()
-                    else
-                        fullName = tostring(self)
-                    end
-                end)
-                local shortName = fullName:match("([^%.]+)$") or fullName
-
-                if RapidFire.Enabled and shortName == "WeaponReloadRequest" then
-                    logScript("Reload blocked")
-                    return nil
-                end
-
-                pcall(function()
-                    local skipLog = IGNORE_REMOTES[shortName] == true
-                    if not skipLog then
-                        logServer(method .. " → " .. shortRemoteName(fullName)
-                            .. " (" .. summarizeArgs(args, n) .. ")")
-                    end
-                end)
-
-                if RapidFire.Enabled and shortName == "WeaponHit" then
-                    local mainResult = oldNC(self, table.unpack(args, 1, n))
-                    local extra = math.clamp(RapidFire.Multiplier - 1, 0, 15)
-                    for i = 1, extra do
-                        task.spawn(function()
-                            task.wait(RapidFire.Delay * i)
-                            pcall(function()
-                                oldNC(self, table.unpack(args, 1, n))
-                            end)
-                        end)
-                    end
-                    return mainResult
-                end
-            end
-
-            return oldNC(self, ...)
-        end))
-    end)
-    if not ok then hooked = false end
-end
-pcall(installHook)
 
 --=============================================================
 -- STARTUP
@@ -607,7 +458,7 @@ local subBrand = new("TextLabel", {
     BackgroundTransparency = 1,
     Position = UDim2.new(0, 16, 0, 24),
     Size = UDim2.new(0, 300, 0, 12),
-    Text = "оперативный контур // v6.5",
+    Text = "clean build // без хуков",
     TextColor3 = P.SubText, Font = Enum.Font.Gotham,
     TextSize = 9, TextXAlignment = Enum.TextXAlignment.Left,
 })
@@ -670,8 +521,7 @@ local contentBox = new("Frame", {
 })
 contentBox.Parent = menu
 
-local TABS = { "MAIN", "LOG", "COMBAT" }
-for i = 3, 15 do table.insert(TABS, "TEST " .. i) end
+local TABS = { "MAIN", "COMBAT" }
 
 local tabButtons = {}
 local contentPages = {}
@@ -795,9 +645,7 @@ local function makeSwitch(card, y, onChanged)
     return set
 end
 
---=============================================================
 -- MAIN
---=============================================================
 local mainPage = makePage("MAIN")
 local listLayout = new("UIListLayout", {
     FillDirection = Enum.FillDirection.Vertical,
@@ -824,7 +672,6 @@ do
         local n = tonumber(box.Text)
         if n then Speed.Value = math.clamp(math.floor(n), 8, 500) end
         box.Text = tostring(Speed.Value)
-        logScript("Speed value set to " .. tostring(Speed.Value))
     end)
 
     makeSwitch(card, 36, function(v)
@@ -833,7 +680,6 @@ do
             local hum = LP.Character and LP.Character:FindFirstChildOfClass("Humanoid")
             if hum then hum.WalkSpeed = 16 end
         end
-        logScript("Speed " .. (v and "ENABLED" or "DISABLED"))
     end)
 end
 
@@ -841,7 +687,6 @@ do
     local card = makeCard(mainPage, 2, "ANTI-FLING")
     makeSwitch(card, 36, function(v)
         AntiFling.Enabled = v
-        logScript("Anti-Fling " .. (v and "ENABLED" or "DISABLED"))
     end)
 end
 
@@ -858,162 +703,13 @@ do
     round(btn, 8); btn.Parent = card
 
     btn.MouseButton1Click:Connect(function()
-        logScript("Rejoin initiated")
         pcall(function() TeleportSvc:Teleport(game.PlaceId, LP) end)
     end)
     btn.MouseEnter:Connect(function() tween(btn, 0.2, { BackgroundTransparency = 0.05 }) end)
     btn.MouseLeave:Connect(function() tween(btn, 0.2, { BackgroundTransparency = 0.25 }) end)
 end
 
---=============================================================
--- LOG
---=============================================================
-local logPage = makePage("LOG")
-logPage.ScrollingDirection = Enum.ScrollingDirection.X
-logPage.AutomaticCanvasSize = Enum.AutomaticSize.None
-logPage.CanvasSize = UDim2.new(1, 0, 1, 0)
-logPage.ElasticBehavior = Enum.ElasticBehavior.Never
-logPage.ScrollingEnabled = false
-
-local logViewport = new("Frame", {
-    Position = UDim2.new(0, 0, 0, 0),
-    Size = UDim2.new(1, 0, 1, -32),
-    BackgroundColor3 = P.Card, BackgroundTransparency = 0.06,
-    BorderSizePixel = 0,
-})
-round(logViewport, 10)
-gradientStroke(logViewport, 1, 0.25, 35)
-logViewport.Parent = logPage
-reg(logViewport, "BackgroundColor3", "Card")
-
-local logScroll = new("ScrollingFrame", {
-    Position = UDim2.new(0, 8, 0, 8),
-    Size = UDim2.new(1, -16, 1, -16),
-    BackgroundTransparency = 1, BorderSizePixel = 0,
-    ScrollBarThickness = 3,
-    ScrollBarImageColor3 = Accent.Main,
-    ScrollBarImageTransparency = 0.4,
-    CanvasSize = UDim2.new(0, 0, 0, 0),
-    AutomaticCanvasSize = Enum.AutomaticSize.Y,
-    ScrollingDirection = Enum.ScrollingDirection.Y,
-})
-logScroll.Parent = logViewport
-
-local logLayout = new("UIListLayout", {
-    FillDirection = Enum.FillDirection.Vertical,
-    Padding = UDim.new(0, 4),
-    SortOrder = Enum.SortOrder.LayoutOrder,
-})
-logLayout.Parent = logScroll
-
-local serverTabBtn = new("TextButton", {
-    Position = UDim2.new(0, 0, 1, -26),
-    Size = UDim2.new(0.44, -2, 0, 26),
-    BackgroundColor3 = Accent.Main, BackgroundTransparency = 0.05,
-    Text = "SERVER LOG", TextColor3 = Color3.fromRGB(255,255,255),
-    Font = Enum.Font.GothamBold, TextSize = 10,
-    AutoButtonColor = false, BorderSizePixel = 0,
-})
-round(serverTabBtn, 8)
-gradientStroke(serverTabBtn, 1, 0.3, 30)
-serverTabBtn.Parent = logPage
-
-local scriptTabBtn = new("TextButton", {
-    Position = UDim2.new(0.44, 0, 1, -26),
-    Size = UDim2.new(0.44, -2, 0, 26),
-    BackgroundColor3 = P.Card, BackgroundTransparency = 0.15,
-    Text = "SCRIPT LOG", TextColor3 = P.SubText,
-    Font = Enum.Font.GothamBold, TextSize = 10,
-    AutoButtonColor = false, BorderSizePixel = 0,
-})
-round(scriptTabBtn, 8)
-gradientStroke(scriptTabBtn, 1, 0.5, 30)
-scriptTabBtn.Parent = logPage
-reg(scriptTabBtn, "BackgroundColor3", "Card")
-reg(scriptTabBtn, "TextColor3", "SubText")
-
-local clearBtn = new("TextButton", {
-    Position = UDim2.new(0.88, 2, 1, -26),
-    Size = UDim2.new(0.12, -2, 0, 26),
-    BackgroundColor3 = P.Card, BackgroundTransparency = 0.15,
-    Text = "CLEAR", TextColor3 = Color3.fromRGB(255, 80, 80),
-    Font = Enum.Font.GothamBold, TextSize = 9,
-    AutoButtonColor = false, BorderSizePixel = 0,
-})
-round(clearBtn, 8)
-gradientStroke(clearBtn, 1, 0.5, 30)
-clearBtn.Parent = logPage
-reg(clearBtn, "BackgroundColor3", "Card")
-
-local logLineCache = {}
-
-local function renderLog()
-    local buf = Logger.buffer[Logger.activeTab]
-    while #logLineCache < #buf do
-        local lbl = new("TextLabel", {
-            Size = UDim2.new(1, 0, 0, 16),
-            BackgroundTransparency = 1,
-            Text = "", TextColor3 = P.Text,
-            Font = Enum.Font.Code, TextSize = 10,
-            TextXAlignment = Enum.TextXAlignment.Left,
-            TextYAlignment = Enum.TextYAlignment.Top,
-            TextWrapped = true,
-            AutomaticSize = Enum.AutomaticSize.Y,
-            LayoutOrder = #logLineCache + 1,
-        })
-        lbl.Parent = logScroll
-        table.insert(logLineCache, lbl)
-        reg(lbl, "TextColor3", "Text")
-    end
-    for i, lbl in ipairs(logLineCache) do
-        if i <= #buf then
-            lbl.Text = buf[i]
-            lbl.Visible = true
-        else
-            lbl.Visible = false
-        end
-    end
-    task.defer(function()
-        logScroll.CanvasPosition = Vector2.new(0, math.max(0, logLayout.AbsoluteContentSize.Y - logScroll.AbsoluteSize.Y))
-    end)
-end
-
-local function switchLogTab(which)
-    Logger.activeTab = which
-    if which == "server" then
-        serverTabBtn.BackgroundColor3 = Accent.Main
-        serverTabBtn.BackgroundTransparency = 0.05
-        serverTabBtn.TextColor3 = Color3.fromRGB(255,255,255)
-        scriptTabBtn.BackgroundColor3 = P.Card
-        scriptTabBtn.BackgroundTransparency = 0.15
-        scriptTabBtn.TextColor3 = P.SubText
-    else
-        scriptTabBtn.BackgroundColor3 = Accent.Main
-        scriptTabBtn.BackgroundTransparency = 0.05
-        scriptTabBtn.TextColor3 = Color3.fromRGB(255,255,255)
-        serverTabBtn.BackgroundColor3 = P.Card
-        serverTabBtn.BackgroundTransparency = 0.15
-        serverTabBtn.TextColor3 = P.SubText
-    end
-    renderLog()
-end
-
-serverTabBtn.MouseButton1Click:Connect(function() switchLogTab("server") end)
-scriptTabBtn.MouseButton1Click:Connect(function() switchLogTab("script") end)
-
-clearBtn.MouseButton1Click:Connect(function()
-    Logger.buffer.server = {}
-    Logger.buffer.script = {}
-    renderLog()
-end)
-
-table.insert(Logger.listeners, function(channel)
-    if channel == Logger.activeTab then renderLog() end
-end)
-
---=============================================================
 -- COMBAT
---=============================================================
 local combatPage = makePage("COMBAT")
 local combatList = new("UIListLayout", {
     FillDirection = Enum.FillDirection.Vertical,
@@ -1046,7 +742,6 @@ do
                 applyAllHitboxes()
             end
             if HitboxChanger.View then refreshAllHitboxViews() end
-            logScript("Hitbox size set to " .. tostring(HitboxChanger.Size))
         end
         box.Text = tostring(HitboxChanger.Size)
     end)
@@ -1054,7 +749,6 @@ do
     makeSwitch(card, 36, function(v)
         HitboxChanger.Enabled = v
         if v then applyAllHitboxes() else restoreAllHitboxes() end
-        logScript("Hitbox Changer " .. (v and "ENABLED" or "DISABLED"))
     end)
 
     local viewBtn = new("TextButton", {
@@ -1081,66 +775,21 @@ do
             tween(viewBtn, 0.22, { BackgroundColor3 = P.Card, TextColor3 = P.SubText, BackgroundTransparency = 0.3 })
             removeAllHitboxViews()
         end
-        logScript("Hitbox View " .. (v and "ENABLED" or "DISABLED"))
     end
     viewBtn.MouseButton1Click:Connect(function() setView(not viewState) end)
 end
 
 do
-    local card = makeCard(combatPage, 2, "RAPID FIRE")
-
-    local box = new("TextBox", {
-        Position = UDim2.new(0, 12, 0, 36),
-        Size = UDim2.new(0, 60, 0, 22),
-        BackgroundColor3 = P.Bg, BackgroundTransparency = 0.4,
-        Text = tostring(RapidFire.Multiplier), TextColor3 = P.Text,
-        Font = Enum.Font.GothamMedium, TextSize = 12,
-        BorderSizePixel = 0, ClearTextOnFocus = false, TextEditable = true,
-    })
-    round(box, 6); box.Parent = card
-    reg(box, "BackgroundColor3", "Bg")
-    reg(box, "TextColor3", "Text")
-
-    box.FocusLost:Connect(function()
-        local n = tonumber(box.Text)
-        if n then RapidFire.Multiplier = math.clamp(math.floor(n), 1, 15) end
-        box.Text = tostring(RapidFire.Multiplier)
-        logScript("Rapid Fire multiplier = " .. tostring(RapidFire.Multiplier))
-    end)
-
-    makeSwitch(card, 36, function(v)
-        RapidFire.Enabled = v
-        logScript("Rapid Fire " .. (v and "ENABLED" or "DISABLED"))
-    end)
-end
-
-do
-    local card = makeCard(combatPage, 3, "ESP")
+    local card = makeCard(combatPage, 2, "ESP")
     makeSwitch(card, 36, function(v)
         ESP.Enabled = v
         refreshAllESP()
-        logScript("ESP " .. (v and "ENABLED" or "DISABLED"))
     end)
-end
-
-for i = 1, 15 do
-    local name = "TEST " .. i
-    local page = makePage(name)
-    local lbl = new("TextLabel", {
-        Size = UDim2.new(1, 0, 0, 50),
-        BackgroundTransparency = 1,
-        Text = name .. " // раздел в разработке",
-        TextColor3 = P.SubText, Font = Enum.Font.Gotham, TextSize = 12,
-    })
-    lbl.Parent = page
-    reg(lbl, "TextColor3", "SubText")
 end
 
 switchTab("MAIN")
 
---=============================================================
 -- SETTINGS
---=============================================================
 local settings = new("CanvasGroup", {
     AnchorPoint = Vector2.new(0.5, 0.5),
     Position = UDim2.new(0.5, 0, 0.5, 0),
@@ -1163,14 +812,6 @@ local sTitle = new("TextLabel", {
 })
 sTitle.Parent = settings
 reg(sTitle, "TextColor3", "Text")
-
-local sDivider = new("Frame", {
-    Position = UDim2.new(0, 16, 0, 36),
-    Size = UDim2.new(1, -32, 0, 1),
-    BackgroundColor3 = P.Divider, BorderSizePixel = 0, ZIndex = 6,
-})
-sDivider.Parent = settings
-reg(sDivider, "BackgroundColor3", "Divider")
 
 local sClose = new("TextButton", {
     Position = UDim2.new(1, -36, 0, 10),
@@ -1200,14 +841,6 @@ local function sRow(y, titleText)
     })
     lbl.Parent = row
     reg(lbl, "TextColor3", "SubText")
-    local div = new("Frame", {
-        Position = UDim2.new(0, 0, 1, 0),
-        Size = UDim2.new(1, 0, 0, 1),
-        BackgroundColor3 = P.Divider, BackgroundTransparency = 0.5,
-        BorderSizePixel = 0, ZIndex = 6,
-    })
-    div.Parent = row
-    reg(div, "BackgroundColor3", "Divider")
     return row
 end
 
@@ -1269,9 +902,7 @@ end)
 local row3 = sRow(116, "ANIMATIONS")
 segControl(row3, { "ON", "OFF" }, "ON", function(v) Theme.anim = (v == "ON") end)
 
---=============================================================
 -- M BUTTON
---=============================================================
 local mBtn = new("TextButton", {
     Size = UDim2.new(0, 50, 0, 50),
     Position = UDim2.new(0, 60, 0.35, 0),
@@ -1327,9 +958,6 @@ do
     end)
 end
 
---=============================================================
--- ПЕРЕХОДЫ
---=============================================================
 local morphing = false
 local started  = false
 
@@ -1423,16 +1051,12 @@ sClose.MouseButton1Click:Connect(function()
     end)
 end)
 
---=============================================================
--- СТАРТ
---=============================================================
 startBtn.MouseButton1Click:Connect(function()
     started = true
     tween(startup, 0.4, { GroupTransparency = 1 })
     task.delay(0.4, function()
         startup.Visible = false
         openMenu()
-        logScript("Meredios HUD started")
     end)
 end)
 
@@ -1448,8 +1072,5 @@ settings.GroupTransparency = 1
 mBtn.Visible = false
 startup.Visible = true
 startup.GroupTransparency = 1
-
-logScript("Kernel loaded")
-renderLog()
 
 return true
