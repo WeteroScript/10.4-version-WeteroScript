@@ -1,5 +1,5 @@
 --[[
-    MEREDIOS v5.2 — оперативный контур
+    MEREDIOS v5.3 — оперативный контур
     Roblox / Delta X Mobile
 --]]
 
@@ -235,28 +235,24 @@ end
 local function logScript(text) logLine("script", text) end
 local function logServer(text) logLine("server", text) end
 
--- короткое имя remote: только последний сегмент пути
 local function shortRemoteName(fullName)
     if not fullName then return "?" end
     local last = fullName:match("([^%.]+)$") or fullName
     if #last < 3 then
-        -- если последний сегмент короткий, добавим ещё один уровень
         local parts = {}
         for p in fullName:gmatch("[^%.]+") do table.insert(parts, p) end
         if #parts >= 2 then
             last = parts[#parts - 1] .. "." .. parts[#parts]
         end
     end
-    if #last > 26 then last = last:sub(1, 24) .. "…" end
     return last
 end
 
--- разбор аргументов: рекурсия в таблицы до глубины 3
+-- рекурсивное описание значения: вложенность в таблицы до глубины 4
 local function describeValue(v, depth)
     depth = depth or 1
     local t = typeof(v)
     if t == "string" then
-        if #v > 16 then return '"' .. v:sub(1, 14) .. '…"' end
         return '"' .. v .. '"'
     elseif t == "Instance" then
         return v.Name
@@ -266,20 +262,16 @@ local function describeValue(v, depth)
         local p = v.Position
         return string.format("CF(%.1f,%.1f,%.1f)", p.X, p.Y, p.Z)
     elseif t == "number" then
-        return string.format("%.2f", v)
+        return string.format("%g", v)
     elseif t == "boolean" then
         return tostring(v)
-    elseif t == "table" and depth <= 3 then
+    elseif t == "table" and depth <= 4 then
         local sub = {}
         local count = 0
         for k, sv in pairs(v) do
             count = count + 1
-            if count > 3 then
-                sub[#sub + 1] = "…"
-                break
-            end
+            if count > 6 then sub[#sub + 1] = "…"; break end
             local keyStr = tostring(k)
-            if type(k) == "string" then keyStr = k end
             sub[#sub + 1] = keyStr .. ":" .. describeValue(sv, depth + 1)
         end
         return "{" .. table.concat(sub, ", ") .. "}"
@@ -289,10 +281,10 @@ end
 
 local function summarizeArgs(args)
     local parts = {}
-    for i = 1, math.min(#args, 5) do
+    for i = 1, math.min(#args, 6) do
         parts[i] = describeValue(args[i], 1)
     end
-    if #args > 5 then parts[#parts + 1] = "…+" .. (#args - 5) end
+    if #args > 6 then parts[#parts + 1] = "…+" .. (#args - 6) end
     return table.concat(parts, ", ")
 end
 
@@ -403,7 +395,7 @@ local function findTarget()
 end
 
 --=============================================================
--- ХУК __namecall (silent aim + server log)
+-- ХУК __namecall
 --=============================================================
 local hooked = false
 
@@ -413,10 +405,52 @@ local IGNORE_REMOTES = {
     PingData = true,
 }
 
+-- направление/позиция по имени поля внутри таблицы
+local FIELD_DIR_NAMES = {
+    d = true, dir = true, direction = true,
+    aimDir = true, look = true, lookDir = true, vector = true,
+}
+local FIELD_POS_NAMES = {
+    p = true, pos = true, position = true,
+    hitPos = true, point = true, target = true,
+}
+
+-- какие remote Fortline трактуем особым образом
+local FORTLINE_MODE = {
+    WeaponFired = "direction",
+    WeaponHit   = "position",
+    WeaponShoot = "direction",
+}
+
+-- точечная обработка таблицы: меняем только поля направления или позиции
+local function fortlineRewrite(tbl, mode, targetPos, camPos, depth)
+    depth = depth or 1
+    if depth > 4 then return false end
+    if typeof(tbl) ~= "table" then return false end
+    local modified = false
+    for k, v in pairs(tbl) do
+        local vt = typeof(v)
+        if vt == "Vector3" then
+            if mode == "direction" and type(k) == "string" and FIELD_DIR_NAMES[k] then
+                tbl[k] = (targetPos - camPos).Unit
+                modified = true
+            elseif mode == "position" and type(k) == "string" and FIELD_POS_NAMES[k] then
+                tbl[k] = targetPos
+                modified = true
+            end
+        elseif vt == "table" then
+            if fortlineRewrite(v, mode, targetPos, camPos, depth + 1) then
+                modified = true
+            end
+        end
+    end
+    return modified
+end
+
+-- generic: magnitude > 30 → позиция, меньше → направление
 local function rewriteValue(v, targetPos, camPos, depth)
     depth = depth or 1
     if depth > 4 then return v, false end
-
     local vt = typeof(v)
     if vt == "Vector3" then
         local mag = v.Magnitude
@@ -480,10 +514,23 @@ local function installHook()
                         local targetPos = aimPart.Position
                         local camPos = Cam.CFrame.Position
                         local modified = false
-                        for i = 1, #args do
-                            local nv, ch = rewriteValue(args[i], targetPos, camPos, 1)
-                            if ch then args[i] = nv; modified = true end
+
+                        local mode = FORTLINE_MODE[shortName]
+                        if mode then
+                            for i = 1, #args do
+                                if typeof(args[i]) == "table" then
+                                    if fortlineRewrite(args[i], mode, targetPos, camPos, 1) then
+                                        modified = true
+                                    end
+                                end
+                            end
+                        else
+                            for i = 1, #args do
+                                local nv, ch = rewriteValue(args[i], targetPos, camPos, 1)
+                                if ch then args[i] = nv; modified = true end
+                            end
                         end
+
                         if modified then
                             return oldNC(self, table.unpack(args))
                         end
@@ -723,9 +770,6 @@ local function refreshAllESP()
     end
 end
 
---=============================================================
--- ХУКИ ПЛЕЙЕРОВ
---=============================================================
 local function hookPlayerForCombat(plr)
     plr.CharacterAdded:Connect(function(char)
         task.wait(0.25)
@@ -831,7 +875,7 @@ local subBrand = new("TextLabel", {
     BackgroundTransparency = 1,
     Position = UDim2.new(0, 16, 0, 24),
     Size = UDim2.new(0, 300, 0, 12),
-    Text = "оперативный контур // v5.2",
+    Text = "оперативный контур // v5.3",
     TextColor3 = P.SubText, Font = Enum.Font.Gotham,
     TextSize = 9, TextXAlignment = Enum.TextXAlignment.Left,
 })
@@ -1129,7 +1173,7 @@ logScroll.Parent = logViewport
 
 local logLayout = new("UIListLayout", {
     FillDirection = Enum.FillDirection.Vertical,
-    Padding = UDim.new(0, 3),
+    Padding = UDim.new(0, 4),
     SortOrder = Enum.SortOrder.LayoutOrder,
 })
 logLayout.Parent = logScroll
@@ -1179,12 +1223,14 @@ local function renderLog()
     local buf = Logger.buffer[Logger.activeTab]
     while #logLineCache < #buf do
         local lbl = new("TextLabel", {
-            Size = UDim2.new(1, 0, 0, 14),
+            Size = UDim2.new(1, 0, 0, 16),
             BackgroundTransparency = 1,
             Text = "", TextColor3 = P.Text,
             Font = Enum.Font.Code, TextSize = 10,
             TextXAlignment = Enum.TextXAlignment.Left,
-            TextWrapped = false,
+            TextYAlignment = Enum.TextYAlignment.Top,
+            TextWrapped = true,
+            AutomaticSize = Enum.AutomaticSize.Y,
             LayoutOrder = #logLineCache + 1,
         })
         lbl.Parent = logScroll
