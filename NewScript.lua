@@ -1,5 +1,5 @@
 --[[
-    MEREDIOS v6.1 — оперативный контур
+    MEREDIOS v6.4 — оперативный контур
     Roblox / Delta X Mobile
 --]]
 
@@ -10,7 +10,7 @@ do
     for _, p in ipairs(targets) do
         if p then
             for _, g in ipairs(p:GetChildren()) do
-                if g.Name == "MerediosHUD" or g.Name == "MerediosFOV" or g.Name == "MerediosESP" then
+                if g.Name == "MerediosHUD" or g.Name == "MerediosESP" then
                     pcall(function() g:Destroy() end)
                 end
             end
@@ -29,9 +29,6 @@ local LP = Players.LocalPlayer
 if not LP then repeat task.wait(0.1); LP = Players.LocalPlayer until LP end
 if not game:IsLoaded() then game.Loaded:Wait() end
 task.wait(0.4)
-
-local Cam = WS.CurrentCamera
-if not Cam then repeat task.wait(0.1); Cam = WS.CurrentCamera until Cam end
 
 --=============================================================
 -- GUI КОНТЕЙНЕРЫ
@@ -61,37 +58,6 @@ do
     if not parented then
         ScreenGui.Parent = LP:WaitForChild("PlayerGui", 10) or LP.PlayerGui
     end
-end
-
-local FovGui = Instance.new("ScreenGui")
-FovGui.Name = "MerediosFOV"
-FovGui.ResetOnSpawn = false
-FovGui.IgnoreGuiInset = true
-FovGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-FovGui.DisplayOrder = 1
-FovGui.Enabled = false
-
-do
-    pcall(function() if syn and syn.protect_gui then syn.protect_gui(FovGui) end end)
-    local okH, hui = pcall(function() return gethui() end)
-    if okH and hui then pcall(function() FovGui.Parent = hui end) end
-    if not FovGui.Parent then pcall(function() FovGui.Parent = game:GetService("CoreGui") end) end
-    if not FovGui.Parent then FovGui.Parent = LP:WaitForChild("PlayerGui", 10) or LP.PlayerGui end
-end
-
-local EspGui = Instance.new("ScreenGui")
-EspGui.Name = "MerediosESP"
-EspGui.ResetOnSpawn = false
-EspGui.IgnoreGuiInset = true
-EspGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-EspGui.DisplayOrder = 2
-
-do
-    pcall(function() if syn and syn.protect_gui then syn.protect_gui(EspGui) end end)
-    local okH, hui = pcall(function() return gethui() end)
-    if okH and hui then pcall(function() EspGui.Parent = hui end) end
-    if not EspGui.Parent then pcall(function() EspGui.Parent = game:GetService("CoreGui") end) end
-    if not EspGui.Parent then EspGui.Parent = LP:WaitForChild("PlayerGui", 10) or LP.PlayerGui end
 end
 
 --=============================================================
@@ -206,8 +172,6 @@ local function applyTheme()
     end
 end
 
-local activeSlider = nil
-
 --=============================================================
 -- LOGGER
 --=============================================================
@@ -272,215 +236,40 @@ local function summarizeArgs(args, n)
 end
 
 --=============================================================
--- TARGET HIGHLIGHT / ESP / RAPID FIRE
---=============================================================
-local SilentAim = {
-    Enabled = false,
-    FOV = 150,
-    CircleColor = Color3.fromRGB(0, 210, 255),
-    Current = nil,
-    Highlight = nil,
-    VisibleOnly = false,
-    TeamCheck = true,
-}
-
--- ESP = контурная подсветка персонажей (Highlight), без ников
-local ESP = {
-    Enabled = false,
-    Color = Color3.fromRGB(255, 60, 60),
-    Highlights = {},
-}
-
--- RAPID FIRE на WeaponHit (реальный урон, не косметика)
-local RapidFire = {
-    Enabled = false,
-    Multiplier = 5,
-    Delay = 0.05,
-}
-
-local fovCircle = new("Frame", {
-    AnchorPoint = Vector2.new(0.5, 0.5),
-    Position = UDim2.new(0.5, 0, 0.5, 0),
-    Size = UDim2.new(0, SilentAim.FOV * 2, 0, SilentAim.FOV * 2),
-    BackgroundTransparency = 1, ZIndex = 1,
-})
-round(fovCircle, 1000)
-fovCircle.Parent = FovGui
-
-local fovStroke = new("UIStroke", {
-    Thickness = 2, Color = SilentAim.CircleColor, Transparency = 0.1,
-    ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
-})
-fovStroke.Parent = fovCircle
-
-local silentBangGui = new("BillboardGui", {
-    Size = UDim2.new(0, 32, 0, 32),
-    StudsOffset = Vector3.new(0, 3.2, 0),
-    AlwaysOnTop = true,
-    LightInfluence = 0,
-    ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
-    Name = "MerediosSilentBang",
-    Enabled = false,
-})
-local silentBangLabel = new("TextLabel", {
-    Size = UDim2.new(1, 0, 1, 0),
-    BackgroundTransparency = 1,
-    Text = "!",
-    TextColor3 = SilentAim.CircleColor,
-    Font = Enum.Font.GothamBlack,
-    TextScaled = true,
-    TextStrokeTransparency = 0,
-    TextStrokeColor3 = Color3.fromRGB(0, 0, 0),
-})
-silentBangLabel.Parent = silentBangGui
-silentBangGui.Parent = EspGui
-
-local function ensureHighlight()
-    if SilentAim.Highlight and SilentAim.Highlight.Parent then return SilentAim.Highlight end
-    local h = Instance.new("Highlight")
-    h.Name = "MerediosTargetHL"
-    h.FillColor = SilentAim.CircleColor; h.FillTransparency = 0.55
-    h.OutlineColor = SilentAim.CircleColor; h.OutlineTransparency = 0
-    h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-    SilentAim.Highlight = h; return h
-end
-
-local function clearTarget()
-    if SilentAim.Highlight then pcall(function() SilentAim.Highlight:Destroy() end); SilentAim.Highlight = nil end
-    SilentAim.Current = nil
-    silentBangGui.Enabled = false
-    silentBangGui.Adornee = nil
-end
-
-local function isVisible(char, hrp)
-    local ray = Ray.new(Cam.CFrame.Position, hrp.Position - Cam.CFrame.Position)
-    local part = WS:FindPartOnRayWithIgnoreList(ray, { char, Cam, LP.Character })
-    return part == nil
-end
-
-local function getAimPart(char)
-    if not char then return nil end
-    return char:FindFirstChild("Head")
-        or char:FindFirstChild("HumanoidRootPart")
-        or char:FindFirstChild("UpperTorso")
-        or char:FindFirstChild("Torso")
-end
-
-local function findTarget()
-    local best, bestDist = nil, math.huge
-    local vp = Cam.ViewportSize
-    local center = Vector2.new(vp.X / 2, vp.Y / 2)
-    for _, plr in ipairs(Players:GetPlayers()) do
-        if plr == LP then continue end
-        local char = plr.Character
-        if not char then continue end
-        local hum = char:FindFirstChildOfClass("Humanoid")
-        if not hum or hum.Health <= 0 then continue end
-        if SilentAim.TeamCheck and plr.Team and LP.Team and plr.Team == LP.Team then continue end
-        local aimPart = getAimPart(char)
-        if not aimPart then continue end
-        local sp, onScreen = Cam:WorldToViewportPoint(aimPart.Position)
-        if not onScreen then continue end
-        local d2 = (Vector2.new(sp.X, sp.Y) - center).Magnitude
-        if d2 > SilentAim.FOV then continue end
-        if SilentAim.VisibleOnly and not isVisible(char, aimPart) then continue end
-        if d2 < bestDist then bestDist = d2; best = plr end
-    end
-    return best
-end
-
-RunService.RenderStepped:Connect(function()
-    if not SilentAim.Enabled then
-        if FovGui.Enabled then FovGui.Enabled = false end
-        if SilentAim.Current then clearTarget() end
-        return
-    end
-
-    FovGui.Enabled = true
-    local target = findTarget()
-
-    if target and target.Character then
-        SilentAim.Current = target
-        local hl = ensureHighlight()
-        if hl.Parent ~= target.Character then hl.Parent = target.Character end
-        hl.FillColor = SilentAim.CircleColor
-        hl.OutlineColor = SilentAim.CircleColor
-
-        local head = target.Character:FindFirstChild("Head")
-        if head then
-            silentBangGui.Adornee = head
-            silentBangGui.Enabled = true
-            silentBangLabel.TextColor3 = SilentAim.CircleColor
-        end
-    else
-        clearTarget()
-    end
-end)
-
---=============================================================
--- SPEED / ANTI-FLING
---=============================================================
-local Speed = { Enabled = false, Value = 32 }
-
-RunService.Heartbeat:Connect(function()
-    if not Speed.Enabled then return end
-    local char = LP.Character
-    local hum = char and char:FindFirstChildOfClass("Humanoid")
-    if hum and hum.WalkSpeed ~= Speed.Value then hum.WalkSpeed = Speed.Value end
-end)
-
-local AntiFling = { Enabled = false }
-
-RunService.Heartbeat:Connect(function()
-    if not AntiFling.Enabled then return end
-    local char = LP.Character
-    if not char then return end
-    local hrp = char:FindFirstChild("HumanoidRootPart")
-    if not hrp then return end
-    local vel = hrp.AssemblyLinearVelocity
-    local ang = hrp.AssemblyAngularVelocity
-    local speed = vel.Magnitude
-    if speed > 40 then
-        local dir = speed > 0 and vel.Unit or Vector3.zero
-        hrp.AssemblyLinearVelocity = dir * math.min(speed, 16)
-    end
-    if ang.Magnitude > 8 then hrp.AssemblyAngularVelocity = Vector3.zero end
-    if vel.Y > 30 then hrp.AssemblyLinearVelocity = Vector3.new(vel.X, 0, vel.Z) end
-    if hrp.Position.Y > 200 then
-        hrp.CFrame = CFrame.new(hrp.Position.X, 20, hrp.Position.Z)
-        hrp.AssemblyLinearVelocity = Vector3.zero
-        hrp.AssemblyAngularVelocity = Vector3.zero
-    end
-end)
-
---=============================================================
--- HITBOX CHANGER (+ VIEW)
+-- HITBOX CHANGER — ФИКС
 --=============================================================
 local HitboxChanger = { Enabled = false, View = false, Size = 12, Original = {} }
 
+-- ФИКС: фильтрует nil чтобы ipairs не останавливался
 local function hitboxParts(char)
     if not char then return {} end
-    return {
-        char:FindFirstChild("HumanoidRootPart"),
-        char:FindFirstChild("Head"),
-        char:FindFirstChild("UpperTorso"),
-        char:FindFirstChild("Torso"),
-        char:FindFirstChild("LowerTorso"),
-    }
+    local list = {}
+    local names = { "HumanoidRootPart", "Head", "UpperTorso", "Torso", "LowerTorso" }
+    for _, name in ipairs(names) do
+        local p = char:FindFirstChild(name)
+        if p and p:IsA("BasePart") then
+            table.insert(list, p)
+        end
+    end
+    return list
 end
 
 local function applyHitboxToChar(char)
     if not char then return end
     for _, part in ipairs(hitboxParts(char)) do
-        if part and part:IsA("BasePart") then
+        if part:IsA("BasePart") then
             if not HitboxChanger.Original[part] then
                 HitboxChanger.Original[part] = {
-                    Size = part.Size, Transparency = part.Transparency, CanCollide = part.CanCollide,
+                    Size = part.Size,
+                    Transparency = part.Transparency,
                 }
             end
             part.Size = Vector3.new(HitboxChanger.Size, HitboxChanger.Size, HitboxChanger.Size)
             part.Transparency = 1
-            part.CanCollide = false
+            -- ФИКС: НЕ трогаем CanCollide.
+            -- ФИКС: явно разрешаем raycast'ам попадать в эту часть.
+            part.CanQuery = true
+            part.CanTouch = true
         end
     end
 end
@@ -492,7 +281,6 @@ local function restoreHitboxForChar(char)
             pcall(function()
                 part.Size = orig.Size
                 part.Transparency = orig.Transparency
-                part.CanCollide = orig.CanCollide
             end)
             HitboxChanger.Original[part] = nil
         end
@@ -515,19 +303,17 @@ end
 local function applyHitboxViewToChar(char)
     if not char then return end
     for _, part in ipairs(hitboxParts(char)) do
-        if part and part:IsA("BasePart") then
-            if not part:FindFirstChild("MerediosHitboxView") then
-                local box = new("BoxHandleAdornment", {
-                    Name = "MerediosHitboxView",
-                    Adornee = part,
-                    AlwaysOnTop = true,
-                    ZIndex = 5,
-                    Transparency = 0.5,
-                    Color3 = SilentAim.CircleColor,
-                    Size = part.Size,
-                })
-                box.Parent = part
-            end
+        if not part:FindFirstChild("MerediosHitboxView") then
+            local box = new("BoxHandleAdornment", {
+                Name = "MerediosHitboxView",
+                Adornee = part,
+                AlwaysOnTop = true,
+                ZIndex = 5,
+                Transparency = 0.5,
+                Color3 = Accent.Main,
+                Size = part.Size,
+            })
+            box.Parent = part
         end
     end
 end
@@ -557,10 +343,8 @@ local function refreshAllHitboxViews()
             local char = plr.Character
             if char then
                 for _, part in ipairs(hitboxParts(char)) do
-                    if part and part:IsA("BasePart") then
-                        local v = part:FindFirstChild("MerediosHitboxView")
-                        if v then v.Size = part.Size end
-                    end
+                    local v = part:FindFirstChild("MerediosHitboxView")
+                    if v then v.Size = part.Size end
                 end
             end
         end
@@ -568,8 +352,10 @@ local function refreshAllHitboxViews()
 end
 
 --=============================================================
--- ESP — контурная подсветка (Highlight), без ников
+-- ESP
 --=============================================================
+local ESP = { Enabled = false, Color = Color3.fromRGB(255, 60, 60), Highlights = {} }
+
 local function createESPHighlight(char)
     if not char then return nil end
     local existing = char:FindFirstChild("MerediosESP")
@@ -609,6 +395,54 @@ local function refreshAllESP()
     end
 end
 
+--=============================================================
+-- SPEED / ANTI-FLING
+--=============================================================
+local Speed = { Enabled = false, Value = 32 }
+
+RunService.Heartbeat:Connect(function()
+    if not Speed.Enabled then return end
+    local char = LP.Character
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    if hum and hum.WalkSpeed ~= Speed.Value then hum.WalkSpeed = Speed.Value end
+end)
+
+local AntiFling = { Enabled = false }
+
+RunService.Heartbeat:Connect(function()
+    if not AntiFling.Enabled then return end
+    local char = LP.Character
+    if not char then return end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+    local vel = hrp.AssemblyLinearVelocity
+    local ang = hrp.AssemblyAngularVelocity
+    local speed = vel.Magnitude
+    if speed > 40 then
+        local dir = speed > 0 and vel.Unit or Vector3.zero
+        hrp.AssemblyLinearVelocity = dir * math.min(speed, 16)
+    end
+    if ang.Magnitude > 8 then hrp.AssemblyAngularVelocity = Vector3.zero end
+    if vel.Y > 30 then hrp.AssemblyLinearVelocity = Vector3.new(vel.X, 0, vel.Z) end
+    if hrp.Position.Y > 200 then
+        hrp.CFrame = CFrame.new(hrp.Position.X, 20, hrp.Position.Z)
+        hrp.AssemblyLinearVelocity = Vector3.zero
+        hrp.AssemblyAngularVelocity = Vector3.zero
+    end
+end)
+
+--=============================================================
+-- RAPID FIRE
+--=============================================================
+local RapidFire = {
+    Enabled = false,
+    Multiplier = 5,
+    Delay = 0.05,
+}
+
+--=============================================================
+-- ХУКИ ПЛЕЙЕРОВ
+--=============================================================
 local function hookPlayerForCombat(plr)
     plr.CharacterAdded:Connect(function(char)
         task.wait(0.25)
@@ -635,7 +469,7 @@ Players.PlayerRemoving:Connect(function(plr)
 end)
 
 --=============================================================
--- ХУК __namecall — LOG + RAPID FIRE (WeaponHit)
+-- ХУК __namecall
 --=============================================================
 local hooked = false
 
@@ -657,29 +491,43 @@ local function installHook()
     local ok = pcall(function()
         local oldNC
         oldNC = hookmetamethod(game, "__namecall", wrapper(function(self, ...)
-            local method = getnamecallmethod()
-            local isRemote = (method == "FireServer" or method == "InvokeServer"
-                              or method == "Fire" or method == "Invoke")
+            local method, fullName, shortName, args
+            local parseOk = pcall(function()
+                method = getnamecallmethod()
+                if not method then error("no method") end
+                args = table.pack(...)
+                fullName = "?"
+                if typeof(self) == "Instance" then
+                    local okN, n = pcall(function() return self:GetFullName() end)
+                    fullName = okN and n or "?"
+                else
+                    fullName = tostring(self)
+                end
+                shortName = fullName:match("([^%.]+)$") or fullName
+            end)
 
-            if not isRemote then
+            if not parseOk then
                 return oldNC(self, ...)
             end
 
-            local args = table.pack(...)
-            local fullName = "?"
-            pcall(function()
-                if typeof(self) == "Instance" then fullName = self:GetFullName() else fullName = tostring(self) end
-            end)
-            local shortName = fullName:match("([^%.]+)$") or fullName
-            local skipLog = IGNORE_REMOTES[shortName] == true
-
-            if not skipLog then
-                logServer(method .. " → " .. shortRemoteName(fullName) .. " (" .. summarizeArgs(args, args.n) .. ")")
+            if RapidFire.Enabled and shortName == "WeaponReloadRequest" then
+                logScript("Reload blocked")
+                return nil
             end
 
-            -- RAPID FIRE: дублируем WeaponHit (реальный урон)
+            pcall(function()
+                local skipLog = IGNORE_REMOTES[shortName] == true
+                if not skipLog and (method == "FireServer" or method == "InvokeServer"
+                                    or method == "Fire" or method == "Invoke") then
+                    logServer(method .. " → " .. shortRemoteName(fullName)
+                        .. " (" .. summarizeArgs(args, args.n) .. ")")
+                end
+            end)
+
             if RapidFire.Enabled and shortName == "WeaponHit" then
-                local mainResult = oldNC(self, table.unpack(args, 1, args.n))
+                local okMain, mainResult = pcall(function()
+                    return oldNC(self, table.unpack(args, 1, args.n))
+                end)
                 local extra = math.clamp(RapidFire.Multiplier - 1, 0, 15)
                 for i = 1, extra do
                     task.spawn(function()
@@ -782,7 +630,7 @@ local subBrand = new("TextLabel", {
     BackgroundTransparency = 1,
     Position = UDim2.new(0, 16, 0, 24),
     Size = UDim2.new(0, 300, 0, 12),
-    Text = "оперативный контур // v6.1",
+    Text = "оперативный контур // v6.4",
     TextColor3 = P.SubText, Font = Enum.Font.Gotham,
     TextSize = 9, TextXAlignment = Enum.TextXAlignment.Left,
 })
@@ -1197,42 +1045,9 @@ local combatList = new("UIListLayout", {
 })
 combatList.Parent = combatPage
 
--- TARGET HIGHLIGHT
-do
-    local card = makeCard(combatPage, 1, "TARGET HIGHLIGHT")
-
-    local gear = new("TextButton", {
-        Position = UDim2.new(1, -112, 0, 38),
-        Size = UDim2.new(0, 22, 0, 22),
-        BackgroundColor3 = Accent.Main, BackgroundTransparency = 0.85,
-        Text = "⚙", TextColor3 = P.Text,
-        Font = Enum.Font.GothamBold, TextSize = 11,
-        AutoButtonColor = false, BorderSizePixel = 0, Visible = false,
-    })
-    round(gear, 6); gear.Parent = card
-    reg(gear, "TextColor3", "Text")
-
-    makeSwitch(card, 36, function(v)
-        SilentAim.Enabled = v
-        logScript("Target Highlight " .. (v and "ENABLED" or "DISABLED"))
-        if v then
-            gear.Visible = true
-            gear.BackgroundTransparency = 1
-            tween(gear, 0.28, { BackgroundTransparency = 0.85 })
-        else
-            tween(gear, 0.22, { BackgroundTransparency = 1 })
-            task.delay(0.22, function() if not SilentAim.Enabled then gear.Visible = false end end)
-        end
-    end)
-
-    gear.MouseButton1Click:Connect(function()
-        if _G.MerediosOpenSASettings then _G.MerediosOpenSASettings() end
-    end)
-end
-
 -- HITBOX
 do
-    local card = makeCard(combatPage, 2, "HITBOX CHANGER")
+    local card = makeCard(combatPage, 1, "HITBOX CHANGER")
 
     local box = new("TextBox", {
         Position = UDim2.new(0, 12, 0, 36),
@@ -1297,7 +1112,7 @@ end
 
 -- RAPID FIRE
 do
-    local card = makeCard(combatPage, 3, "RAPID FIRE")
+    local card = makeCard(combatPage, 2, "RAPID FIRE")
 
     local box = new("TextBox", {
         Position = UDim2.new(0, 12, 0, 36),
@@ -1324,9 +1139,9 @@ do
     end)
 end
 
--- ESP (Highlight)
+-- ESP
 do
-    local card = makeCard(combatPage, 4, "ESP")
+    local card = makeCard(combatPage, 3, "ESP")
     makeSwitch(card, 36, function(v)
         ESP.Enabled = v
         refreshAllESP()
@@ -1635,249 +1450,6 @@ sClose.MouseButton1Click:Connect(function()
 end)
 
 --=============================================================
--- HIGHLIGHT PANEL
---=============================================================
-local saPanel = new("CanvasGroup", {
-    AnchorPoint = Vector2.new(0.5, 0.5),
-    Position = UDim2.new(0.7, 0, 0.5, 0),
-    Size = UDim2.new(0, 240, 0, 160),
-    BackgroundColor3 = P.BgGlass, BackgroundTransparency = 0.04,
-    BorderSizePixel = 0, Visible = false, GroupTransparency = 1, ZIndex = 20,
-})
-round(saPanel, 14)
-gradientStroke(saPanel, 1.2, 0.1, 30)
-saPanel.Parent = ScreenGui
-reg(saPanel, "BackgroundColor3", "BgGlass")
-
-local saTitle = new("TextLabel", {
-    BackgroundTransparency = 1,
-    Position = UDim2.new(0, 14, 0, 10),
-    Size = UDim2.new(1, -55, 0, 16),
-    Text = "TARGET HIGHLIGHT", TextColor3 = P.Text,
-    Font = Enum.Font.GothamBold, TextSize = 11,
-    TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 21,
-})
-saTitle.Parent = saPanel
-reg(saTitle, "TextColor3", "Text")
-
-local saClose = new("TextButton", {
-    Position = UDim2.new(1, -32, 0, 8),
-    Size = UDim2.new(0, 22, 0, 22),
-    BackgroundColor3 = P.Card, BackgroundTransparency = 0.15,
-    Text = "×", TextColor3 = P.Text,
-    Font = Enum.Font.GothamBold, TextSize = 14,
-    AutoButtonColor = false, BorderSizePixel = 0, ZIndex = 21,
-})
-round(saClose, 6); saClose.Parent = saPanel
-reg(saClose, "BackgroundColor3", "Card")
-reg(saClose, "TextColor3", "Text")
-
-local saHeader = new("Frame", {
-    Size = UDim2.new(1, 0, 0, 34),
-    BackgroundTransparency = 1, ZIndex = 22,
-})
-saHeader.Parent = saPanel
-dragify(saPanel, saHeader)
-
-saClose.MouseButton1Click:Connect(function()
-    tween(saPanel, 0.26, { GroupTransparency = 1 })
-    task.delay(0.26, function()
-        saPanel.Visible = false
-        saPanel.GroupTransparency = 0
-    end)
-end)
-
-local function saLabel(y, text)
-    local lbl = new("TextLabel", {
-        BackgroundTransparency = 1,
-        Position = UDim2.new(0, 14, 0, y),
-        Size = UDim2.new(1, -28, 0, 12),
-        Text = text, TextColor3 = P.SubText,
-        Font = Enum.Font.GothamMedium, TextSize = 9,
-        TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 21,
-    })
-    lbl.Parent = saPanel
-    reg(lbl, "TextColor3", "SubText")
-    return lbl
-end
-
-local function saHolder(y)
-    local h = new("Frame", {
-        Position = UDim2.new(0, 14, 0, y),
-        Size = UDim2.new(1, -28, 0, 22),
-        BackgroundTransparency = 1, ZIndex = 21,
-    })
-    h.Parent = saPanel
-    return h
-end
-
-local function makeSlider(parent, minV, maxV, defV, onChange, onDragStart, onDragEnd)
-    local container = new("Frame", { Size = UDim2.new(1, 0, 0, 22), BackgroundTransparency = 1 })
-    container.Parent = parent
-
-    local track = new("Frame", {
-        Size = UDim2.new(1, -46, 0, 4),
-        Position = UDim2.new(0, 0, 0.5, 0),
-        AnchorPoint = Vector2.new(0, 0.5),
-        BackgroundColor3 = P.Track, BorderSizePixel = 0,
-    })
-    round(track, 2); track.Parent = container
-    reg(track, "BackgroundColor3", "Track")
-
-    local fill = new("Frame", {
-        Size = UDim2.new(0, 0, 1, 0),
-        BackgroundColor3 = Accent.Main, BorderSizePixel = 0,
-    })
-    round(fill, 2); fill.Parent = track
-
-    local knob = new("Frame", {
-        Size = UDim2.new(0, 12, 0, 12),
-        Position = UDim2.new(0, 0, 0.5, 0),
-        AnchorPoint = Vector2.new(0.5, 0.5),
-        BackgroundColor3 = Color3.fromRGB(255,255,255),
-        BorderSizePixel = 0, ZIndex = 3,
-    })
-    round(knob, 6); knob.Parent = track
-
-    local lbl = new("TextLabel", {
-        Size = UDim2.new(0, 42, 1, 0),
-        Position = UDim2.new(1, -42, 0, 0),
-        BackgroundTransparency = 1, Text = tostring(defV),
-        TextColor3 = P.SubText, Font = Enum.Font.GothamMedium,
-        TextSize = 11, TextXAlignment = Enum.TextXAlignment.Right,
-    })
-    lbl.Parent = container
-    reg(lbl, "TextColor3", "SubText")
-
-    local value = defV
-    local dragging = false
-
-    local function setRel(rel)
-        rel = math.clamp(rel, 0, 1)
-        value = math.floor(minV + (maxV - minV) * rel + 0.5)
-        fill.Size = UDim2.new(rel, 0, 1, 0)
-        knob.Position = UDim2.new(rel, 0, 0.5, 0)
-        lbl.Text = tostring(value)
-        if onChange then onChange(value) end
-    end
-
-    local function fromInput(input)
-        local rel = (input.Position.X - track.AbsolutePosition.X) / math.max(track.AbsoluteSize.X, 1)
-        setRel(rel)
-    end
-
-    local btn = new("TextButton", { Size = UDim2.new(1,0,1,0), BackgroundTransparency = 1, Text = "" })
-    btn.Parent = container
-
-    btn.InputBegan:Connect(function(input)
-        if activeSlider and activeSlider ~= container then return end
-        local t = input.UserInputType
-        if t == Enum.UserInputType.MouseButton1 or t == Enum.UserInputType.Touch then
-            activeSlider = container
-            dragging = true
-            fromInput(input)
-            if onDragStart then onDragStart() end
-        end
-    end)
-    UIS.InputChanged:Connect(function(input)
-        if not dragging then return end
-        local t = input.UserInputType
-        if t == Enum.UserInputType.MouseMovement or t == Enum.UserInputType.Touch then
-            fromInput(input)
-        end
-    end)
-    UIS.InputEnded:Connect(function(input)
-        local t = input.UserInputType
-        if t == Enum.UserInputType.MouseButton1 or t == Enum.UserInputType.Touch then
-            if dragging then
-                dragging = false
-                if activeSlider == container then activeSlider = nil end
-                if onDragEnd then onDragEnd() end
-            end
-        end
-    end)
-
-    local startRel = (defV - minV) / (maxV - minV)
-    fill.Size = UDim2.new(startRel, 0, 1, 0)
-    knob.Position = UDim2.new(startRel, 0, 0.5, 0)
-    return container
-end
-
-saLabel(40, "FOV")
-makeSlider(saHolder(56), 20, 400, SilentAim.FOV,
-    function(v)
-        SilentAim.FOV = v
-        fovCircle.Size = UDim2.new(0, v * 2, 0, v * 2)
-    end,
-    function()
-        FovGui.DisplayOrder = 9999
-        FovGui.Enabled = true
-    end,
-    function()
-        FovGui.DisplayOrder = 1
-        if not SilentAim.Enabled then FovGui.Enabled = false end
-    end
-)
-fovCircle.Size = UDim2.new(0, SilentAim.FOV * 2, 0, SilentAim.FOV * 2)
-
-saLabel(82, "CIRCLE COLOR")
-local colorRow = new("Frame", {
-    Position = UDim2.new(0, 14, 0, 98),
-    Size = UDim2.new(1, -28, 0, 20),
-    BackgroundTransparency = 1, ZIndex = 21,
-})
-colorRow.Parent = saPanel
-
-local ColorOptions = {
-    Color3.fromRGB(0, 210, 255), Color3.fromRGB(160, 95, 255),
-    Color3.fromRGB(255, 95, 175), Color3.fromRGB(60, 220, 130),
-    Color3.fromRGB(255, 80, 80),
-}
-local colLayout = new("UIListLayout", {
-    FillDirection = Enum.FillDirection.Horizontal,
-    Padding = UDim.new(0, 5),
-    SortOrder = Enum.SortOrder.LayoutOrder,
-})
-colLayout.Parent = colorRow
-
-for i, c in ipairs(ColorOptions) do
-    local b = new("TextButton", {
-        Size = UDim2.new(0, 36, 0, 20),
-        BackgroundColor3 = c, BackgroundTransparency = 0.15,
-        Text = "", AutoButtonColor = false, BorderSizePixel = 0,
-        LayoutOrder = i, ZIndex = 21,
-    })
-    round(b, 5); b.Parent = colorRow
-    b.MouseButton1Click:Connect(function()
-        SilentAim.CircleColor = c
-        fovStroke.Color = c
-        silentBangLabel.TextColor3 = c
-        if SilentAim.Highlight and SilentAim.Highlight.Parent then
-            SilentAim.Highlight.FillColor = c
-            SilentAim.Highlight.OutlineColor = c
-        end
-        for _, plr in ipairs(Players:GetPlayers()) do
-            if plr ~= LP then
-                local char = plr.Character
-                if char then
-                    for _, d in ipairs(char:GetDescendants()) do
-                        if d.Name == "MerediosHitboxView" and d:IsA("BoxHandleAdornment") then
-                            d.Color3 = c
-                        end
-                    end
-                end
-            end
-        end
-    end)
-end
-
-function _G.MerediosOpenSASettings()
-    saPanel.Visible = true
-    saPanel.GroupTransparency = 1
-    tween(saPanel, 0.32, { GroupTransparency = 0 })
-end
-
---=============================================================
 -- СТАРТ
 --=============================================================
 startBtn.MouseButton1Click:Connect(function()
@@ -1899,11 +1471,7 @@ menu.Visible = false
 menu.GroupTransparency = 0
 settings.Visible = false
 settings.GroupTransparency = 1
-saPanel.Visible = false
-saPanel.GroupTransparency = 1
 mBtn.Visible = false
-FovGui.DisplayOrder = 1
-FovGui.Enabled = false
 startup.Visible = true
 startup.GroupTransparency = 1
 
