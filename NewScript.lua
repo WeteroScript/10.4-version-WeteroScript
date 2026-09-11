@@ -1,5 +1,5 @@
 --[[
-    MEREDIOS v5.1 — оперативный контур
+    MEREDIOS v5.2 — оперативный контур
     Roblox / Delta X Mobile
 --]]
 
@@ -235,27 +235,64 @@ end
 local function logScript(text) logLine("script", text) end
 local function logServer(text) logLine("server", text) end
 
-local function summarizeArgs(args)
-    local parts = {}
-    for i = 1, math.min(#args, 4) do
-        local v = args[i]
-        local t = typeof(v)
-        if t == "string" then
-            parts[i] = '"' .. v:sub(1, 24) .. (#v > 24 and "…" or "") .. '"'
-        elseif t == "Instance" then
-            parts[i] = v.Name
-        elseif t == "Vector3" then
-            parts[i] = string.format("V3(%.1f,%.1f,%.1f)", v.X, v.Y, v.Z)
-        elseif t == "CFrame" then
-            local p = v.Position
-            parts[i] = string.format("CF(%.1f,%.1f,%.1f)", p.X, p.Y, p.Z)
-        elseif t == "number" then
-            parts[i] = string.format("%.2f", v)
-        else
-            parts[i] = t
+-- короткое имя remote: только последний сегмент пути
+local function shortRemoteName(fullName)
+    if not fullName then return "?" end
+    local last = fullName:match("([^%.]+)$") or fullName
+    if #last < 3 then
+        -- если последний сегмент короткий, добавим ещё один уровень
+        local parts = {}
+        for p in fullName:gmatch("[^%.]+") do table.insert(parts, p) end
+        if #parts >= 2 then
+            last = parts[#parts - 1] .. "." .. parts[#parts]
         end
     end
-    if #args > 4 then parts[#parts + 1] = "…+" .. (#args - 4) end
+    if #last > 26 then last = last:sub(1, 24) .. "…" end
+    return last
+end
+
+-- разбор аргументов: рекурсия в таблицы до глубины 3
+local function describeValue(v, depth)
+    depth = depth or 1
+    local t = typeof(v)
+    if t == "string" then
+        if #v > 16 then return '"' .. v:sub(1, 14) .. '…"' end
+        return '"' .. v .. '"'
+    elseif t == "Instance" then
+        return v.Name
+    elseif t == "Vector3" then
+        return string.format("V3(%.1f,%.1f,%.1f)", v.X, v.Y, v.Z)
+    elseif t == "CFrame" then
+        local p = v.Position
+        return string.format("CF(%.1f,%.1f,%.1f)", p.X, p.Y, p.Z)
+    elseif t == "number" then
+        return string.format("%.2f", v)
+    elseif t == "boolean" then
+        return tostring(v)
+    elseif t == "table" and depth <= 3 then
+        local sub = {}
+        local count = 0
+        for k, sv in pairs(v) do
+            count = count + 1
+            if count > 3 then
+                sub[#sub + 1] = "…"
+                break
+            end
+            local keyStr = tostring(k)
+            if type(k) == "string" then keyStr = k end
+            sub[#sub + 1] = keyStr .. ":" .. describeValue(sv, depth + 1)
+        end
+        return "{" .. table.concat(sub, ", ") .. "}"
+    end
+    return t
+end
+
+local function summarizeArgs(args)
+    local parts = {}
+    for i = 1, math.min(#args, 5) do
+        parts[i] = describeValue(args[i], 1)
+    end
+    if #args > 5 then parts[#parts + 1] = "…+" .. (#args - 5) end
     return table.concat(parts, ", ")
 end
 
@@ -289,7 +326,6 @@ local fovStroke = new("UIStroke", {
 })
 fovStroke.Parent = fovCircle
 
--- "!" над целью silent aim
 local silentBangGui = new("BillboardGui", {
     Size = UDim2.new(0, 32, 0, 32),
     StudsOffset = Vector3.new(0, 3.2, 0),
@@ -426,15 +462,15 @@ local function installHook()
             if isRemote then
                 local args = { ... }
 
-                local name = "?"
+                local fullName = "?"
                 pcall(function()
-                    if typeof(self) == "Instance" then name = self:GetFullName() else name = tostring(self) end
+                    if typeof(self) == "Instance" then fullName = self:GetFullName() else fullName = tostring(self) end
                 end)
-                local shortName = name:match("([^%.]+)$") or name
+                local shortName = fullName:match("([^%.]+)$") or fullName
                 local skipLog = IGNORE_REMOTES[shortName] == true
 
                 if not skipLog then
-                    logServer(method .. " → " .. name .. " (" .. summarizeArgs(args) .. ")")
+                    logServer(method .. " → " .. shortRemoteName(fullName) .. " (" .. summarizeArgs(args) .. ")")
                 end
 
                 if SilentAim.Enabled and SilentAim.Current then
@@ -582,7 +618,6 @@ local function restoreAllHitboxes()
     HitboxChanger.Original = {}
 end
 
--- визуализация хитбокса через BoxHandleAdornment
 local function applyHitboxViewToChar(char)
     if not char then return end
     for _, part in ipairs(hitboxParts(char)) do
@@ -625,7 +660,6 @@ local function removeAllHitboxViews()
 end
 
 local function refreshAllHitboxViews()
-    -- синхронизация размеров при смене HitboxChanger.Size когда View уже включён
     for _, plr in ipairs(Players:GetPlayers()) do
         if plr ~= LP then
             local char = plr.Character
@@ -642,7 +676,7 @@ local function refreshAllHitboxViews()
 end
 
 --=============================================================
--- ESP (имя над головой, без "!")
+-- ESP
 --=============================================================
 local function makeNameGui(plr, color)
     local bg = new("BillboardGui", {
@@ -797,7 +831,7 @@ local subBrand = new("TextLabel", {
     BackgroundTransparency = 1,
     Position = UDim2.new(0, 16, 0, 24),
     Size = UDim2.new(0, 300, 0, 12),
-    Text = "оперативный контур // v5.1",
+    Text = "оперативный контур // v5.2",
     TextColor3 = P.SubText, Font = Enum.Font.Gotham,
     TextSize = 9, TextXAlignment = Enum.TextXAlignment.Left,
 })
@@ -945,9 +979,6 @@ local function makeCard(parent, order, title)
     return card
 end
 
---=============================================================
--- SWITCH (toggle с лейблом)
---=============================================================
 local function makeSwitch(card, y, onChanged)
     local track = new("Frame", {
         Size = UDim2.new(0, 40, 0, 18),
@@ -1001,7 +1032,6 @@ local listLayout = new("UIListLayout", {
 })
 listLayout.Parent = mainPage
 
--- SPEED WALK
 do
     local card = makeCard(mainPage, 1, "SPEED WALK")
     local box = new("TextBox", {
@@ -1033,7 +1063,6 @@ do
     end)
 end
 
--- ANTI-FLING
 do
     local card = makeCard(mainPage, 2, "ANTI-FLING")
     makeSwitch(card, 36, function(v)
@@ -1042,7 +1071,6 @@ do
     end)
 end
 
--- REJOIN
 do
     local card = makeCard(mainPage, 3, "REJOIN")
     local btn = new("TextButton", {
@@ -1106,7 +1134,6 @@ local logLayout = new("UIListLayout", {
 })
 logLayout.Parent = logScroll
 
--- три кнопки снизу: SERVER LOG | SCRIPT LOG | CLEAR
 local serverTabBtn = new("TextButton", {
     Position = UDim2.new(0, 0, 1, -26),
     Size = UDim2.new(0.44, -2, 0, 26),
@@ -1221,7 +1248,6 @@ local combatList = new("UIListLayout", {
 })
 combatList.Parent = combatPage
 
--- SLIENT AIM
 do
     local card = makeCard(combatPage, 1, "Slient Aim")
 
@@ -1254,7 +1280,6 @@ do
     end)
 end
 
--- HITBOX CHANGER + VIEW
 do
     local card = makeCard(combatPage, 2, "HITBOX CHANGER")
 
@@ -1292,7 +1317,6 @@ do
         logScript("Hitbox Changer " .. (v and "ENABLED" or "DISABLED"))
     end)
 
-    -- кнопка VIEW
     local viewBtn = new("TextButton", {
         Position = UDim2.new(1, -104, 0, 36),
         Size = UDim2.new(0, 52, 0, 22),
@@ -1322,7 +1346,6 @@ do
     viewBtn.MouseButton1Click:Connect(function() setView(not viewState) end)
 end
 
--- ESP
 do
     local card = makeCard(combatPage, 3, "ESP")
     makeSwitch(card, 36, function(v)
@@ -1332,9 +1355,6 @@ do
     end)
 end
 
---=============================================================
--- TEST 1..15 (все, включая 2 — для совпадения нумерации)
---=============================================================
 for i = 1, 15 do
     local name = "TEST " .. i
     local page = makePage(name)
@@ -1867,7 +1887,6 @@ for i, c in ipairs(ColorOptions) do
             SilentAim.Highlight.FillColor = c
             SilentAim.Highlight.OutlineColor = c
         end
-        -- обновить цвет визуальных хитбоксов
         for _, plr in ipairs(Players:GetPlayers()) do
             if plr ~= LP then
                 local char = plr.Character
