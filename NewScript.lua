@@ -1,5 +1,5 @@
 --[[
-    MEREDIOS v6.4 — оперативный контур
+    MEREDIOS v6.5 — оперативный контур
     Roblox / Delta X Mobile
 --]]
 
@@ -245,12 +245,13 @@ local function applyHitboxToChar(char)
     if not char then return end
     for _, part in ipairs(hitboxParts(char)) do
         if not HitboxChanger.Original[part] then
-            HitboxChanger.Original[part] = { Size = part.Size, Transparency = part.Transparency }
+            HitboxChanger.Original[part] = {
+                Size = part.Size, Transparency = part.Transparency, CanCollide = part.CanCollide,
+            }
         end
         part.Size = Vector3.new(HitboxChanger.Size, HitboxChanger.Size, HitboxChanger.Size)
         part.Transparency = 1
-        part.CanQuery = true
-        part.CanTouch = true
+        part.CanCollide = false
     end
 end
 
@@ -261,6 +262,7 @@ local function restoreHitboxForChar(char)
             pcall(function()
                 part.Size = orig.Size
                 part.Transparency = orig.Transparency
+                part.CanCollide = orig.CanCollide
             end)
             HitboxChanger.Original[part] = nil
         end
@@ -443,7 +445,7 @@ Players.PlayerRemoving:Connect(function(plr)
 end)
 
 --=============================================================
--- ХУК __namecall
+-- ХУК __namecall (без `...` во вложенных функциях)
 --=============================================================
 local hooked = false
 
@@ -465,51 +467,54 @@ local function installHook()
     local ok = pcall(function()
         local oldNC
         oldNC = hookmetamethod(game, "__namecall", wrapper(function(self, ...)
-            local method, fullName, shortName, args
-            local parseOk = pcall(function()
-                method = getnamecallmethod()
-                if not method then error("no method") end
-                args = table.pack(...)
-                fullName = "?"
-                if typeof(self) == "Instance" then
-                    local okN, n = pcall(function() return self:GetFullName() end)
-                    fullName = okN and n or "?"
-                else
-                    fullName = tostring(self)
-                end
-                shortName = fullName:match("([^%.]+)$") or fullName
-            end)
+            -- фикс: захватываю varargs ДО вложенных функций
+            local n = select("#", ...)
+            local args = {...}
+            args.n = n
 
-            if not parseOk then return oldNC(self, ...) end
+            local method = getnamecallmethod()
+            if not method then return oldNC(self, ...) end
 
-            if RapidFire.Enabled and shortName == "WeaponReloadRequest" then
-                logScript("Reload blocked")
-                return nil
-            end
+            local isRemote = (method == "FireServer" or method == "InvokeServer"
+                              or method == "Fire" or method == "Invoke")
 
-            pcall(function()
-                local skipLog = IGNORE_REMOTES[shortName] == true
-                if not skipLog and (method == "FireServer" or method == "InvokeServer"
-                                    or method == "Fire" or method == "Invoke") then
-                    logServer(method .. " → " .. shortRemoteName(fullName)
-                        .. " (" .. summarizeArgs(args, args.n) .. ")")
-                end
-            end)
-
-            if RapidFire.Enabled and shortName == "WeaponHit" then
-                local okMain, mainResult = pcall(function()
-                    return oldNC(self, table.unpack(args, 1, args.n))
+            if isRemote then
+                local fullName = "?"
+                pcall(function()
+                    if typeof(self) == "Instance" then
+                        fullName = self:GetFullName()
+                    else
+                        fullName = tostring(self)
+                    end
                 end)
-                local extra = math.clamp(RapidFire.Multiplier - 1, 0, 15)
-                for i = 1, extra do
-                    task.spawn(function()
-                        task.wait(RapidFire.Delay * i)
-                        pcall(function()
-                            oldNC(self, table.unpack(args, 1, args.n))
-                        end)
-                    end)
+                local shortName = fullName:match("([^%.]+)$") or fullName
+
+                if RapidFire.Enabled and shortName == "WeaponReloadRequest" then
+                    logScript("Reload blocked")
+                    return nil
                 end
-                return mainResult
+
+                pcall(function()
+                    local skipLog = IGNORE_REMOTES[shortName] == true
+                    if not skipLog then
+                        logServer(method .. " → " .. shortRemoteName(fullName)
+                            .. " (" .. summarizeArgs(args, n) .. ")")
+                    end
+                end)
+
+                if RapidFire.Enabled and shortName == "WeaponHit" then
+                    local mainResult = oldNC(self, table.unpack(args, 1, n))
+                    local extra = math.clamp(RapidFire.Multiplier - 1, 0, 15)
+                    for i = 1, extra do
+                        task.spawn(function()
+                            task.wait(RapidFire.Delay * i)
+                            pcall(function()
+                                oldNC(self, table.unpack(args, 1, n))
+                            end)
+                        end)
+                    end
+                    return mainResult
+                end
             end
 
             return oldNC(self, ...)
@@ -602,7 +607,7 @@ local subBrand = new("TextLabel", {
     BackgroundTransparency = 1,
     Position = UDim2.new(0, 16, 0, 24),
     Size = UDim2.new(0, 300, 0, 12),
-    Text = "оперативный контур // v6.4",
+    Text = "оперативный контур // v6.5",
     TextColor3 = P.SubText, Font = Enum.Font.Gotham,
     TextSize = 9, TextXAlignment = Enum.TextXAlignment.Left,
 })
