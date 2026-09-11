@@ -1,5 +1,5 @@
 --[[
-    MEREDIOS v5.3 — оперативный контур
+    MEREDIOS v5.4 — оперативный контур
     Roblox / Delta X Mobile
 --]]
 
@@ -248,7 +248,6 @@ local function shortRemoteName(fullName)
     return last
 end
 
--- рекурсивное описание значения: вложенность в таблицы до глубины 4
 local function describeValue(v, depth)
     depth = depth or 1
     local t = typeof(v)
@@ -295,13 +294,10 @@ local SilentAim = {
     Enabled=false, FOV=150, Target="Closest", VisibleOnly=false,
     TeamCheck=true, Smoothness=0.15, HitChance=100,
     CircleColor=Color3.fromRGB(0,210,255), Current=nil, Highlight=nil,
+    Headshot = true,
 }
 
-local ESP = {
-    Enabled = false,
-    Color = Color3.fromRGB(255, 60, 60),
-    Guis = {},
-}
+local ESP = { Enabled = false, Color = Color3.fromRGB(255, 60, 60), Guis = {} }
 
 local fovCircle = new("Frame", {
     AnchorPoint = Vector2.new(0.5, 0.5),
@@ -371,6 +367,11 @@ local function getAimPart(char)
         or char:FindFirstChild("Torso")
 end
 
+local function getHeadPart(char)
+    if not char then return nil end
+    return char:FindFirstChild("Head")
+end
+
 local function findTarget()
     local best, bestDist = nil, math.huge
     local vp = Cam.ViewportSize
@@ -395,9 +396,10 @@ local function findTarget()
 end
 
 --=============================================================
--- ХУК __namecall
+-- ХУК __namecall — ТОЧЕЧНЫЙ ПОД FORTLINE
 --=============================================================
 local hooked = false
+local lastOrigin = nil   -- origin из последнего WeaponFired
 
 local IGNORE_REMOTES = {
     ClientLogging = true,
@@ -405,49 +407,39 @@ local IGNORE_REMOTES = {
     PingData = true,
 }
 
--- направление/позиция по имени поля внутри таблицы
-local FIELD_DIR_NAMES = {
-    d = true, dir = true, direction = true,
-    aimDir = true, look = true, lookDir = true, vector = true,
-}
-local FIELD_POS_NAMES = {
-    p = true, pos = true, position = true,
-    hitPos = true, point = true, target = true,
-}
-
--- какие remote Fortline трактуем особым образом
-local FORTLINE_MODE = {
-    WeaponFired = "direction",
-    WeaponHit   = "position",
-    WeaponShoot = "direction",
-}
-
--- точечная обработка таблицы: меняем только поля направления или позиции
-local function fortlineRewrite(tbl, mode, targetPos, camPos, depth)
+-- найти поле в таблице по имени (recursive, до 3 уровней)
+local function findField(tbl, fieldName, depth)
     depth = depth or 1
-    if depth > 4 then return false end
-    if typeof(tbl) ~= "table" then return false end
-    local modified = false
-    for k, v in pairs(tbl) do
-        local vt = typeof(v)
-        if vt == "Vector3" then
-            if mode == "direction" and type(k) == "string" and FIELD_DIR_NAMES[k] then
-                tbl[k] = (targetPos - camPos).Unit
-                modified = true
-            elseif mode == "position" and type(k) == "string" and FIELD_POS_NAMES[k] then
-                tbl[k] = targetPos
-                modified = true
-            end
-        elseif vt == "table" then
-            if fortlineRewrite(v, mode, targetPos, camPos, depth + 1) then
-                modified = true
-            end
+    if depth > 3 then return nil end
+    if typeof(tbl) ~= "table" then return nil end
+    if tbl[fieldName] then return tbl[fieldName] end
+    for _, v in pairs(tbl) do
+        if typeof(v) == "table" then
+            local r = findField(v, fieldName, depth + 1)
+            if r ~= nil then return r end
         end
     end
-    return modified
+    return nil
 end
 
--- generic: magnitude > 30 → позиция, меньше → направление
+-- установить поле в таблице (recursive)
+local function setField(tbl, fieldName, value, depth)
+    depth = depth or 1
+    if depth > 3 then return false end
+    if typeof(tbl) ~= "table" then return false end
+    if tbl[fieldName] ~= nil then
+        tbl[fieldName] = value
+        return true
+    end
+    for _, v in pairs(tbl) do
+        if typeof(v) == "table" then
+            if setField(v, fieldName, value, depth + 1) then return true end
+        end
+    end
+    return false
+end
+
+-- generic fallback для прочих remote
 local function rewriteValue(v, targetPos, camPos, depth)
     depth = depth or 1
     if depth > 4 then return v, false end
@@ -471,6 +463,58 @@ local function rewriteValue(v, targetPos, camPos, depth)
         return v, modified
     end
     return v, false
+end
+
+-- точечная обработка Fortline
+local function handleFortlineRemote(shortName, args, targetPos, camPos)
+    local modified = false
+
+    if shortName == "WeaponFired" then
+        for i = 1, #args do
+            local a = args[i]
+            if typeof(a) == "table" then
+                -- сохранить origin для последующего WeaponHit
+                local origin = findField(a, "origin")
+                if typeof(origin) == "Vector3" then
+                    lastOrigin = origin
+                end
+                -- заменить dir на unit к цели
+                local dir = findField(a, "dir") or findField(a, "direction")
+                if typeof(dir) == "Vector3" then
+                    local fromOrigin = (typeof(origin) == "Vector3") and origin or camPos
+                    local newDir = (targetPos - fromOrigin).Unit
+                    if setField(a, "dir", newDir) then modified = true end
+                    if setField(a, "direction", newDir) then modified = true end
+                end
+            end
+        end
+    elseif shortName == "WeaponHit" then
+        for i = 1, #args do
+            local a = args[i]
+            if typeof(a) == "table" then
+                -- p → позиция головы/цели
+                local aimPart = SilentAim.Current and getHeadPart(SilentAim.Current.Character)
+                local hitPos = aimPart and aimPart.Position or targetPos
+                if setField(a, "p", hitPos) then modified = true end
+                if setField(a, "pos", hitPos) then modified = true end
+                if setField(a, "position", hitPos) then modified = true end
+
+                -- part → "Head" для хедшота
+                if SilentAim.Headshot then
+                    if setField(a, "part", "Head") then modified = true end
+                end
+
+                -- пересчёт d и maxDist от lastOrigin
+                if lastOrigin then
+                    local newD = (hitPos - lastOrigin).Magnitude
+                    if setField(a, "d", newD) then modified = true end
+                    if setField(a, "maxDist", newD) then modified = true end
+                end
+            end
+        end
+    end
+
+    return modified
 end
 
 local function installHook()
@@ -515,15 +559,8 @@ local function installHook()
                         local camPos = Cam.CFrame.Position
                         local modified = false
 
-                        local mode = FORTLINE_MODE[shortName]
-                        if mode then
-                            for i = 1, #args do
-                                if typeof(args[i]) == "table" then
-                                    if fortlineRewrite(args[i], mode, targetPos, camPos, 1) then
-                                        modified = true
-                                    end
-                                end
-                            end
+                        if shortName == "WeaponFired" or shortName == "WeaponHit" then
+                            modified = handleFortlineRemote(shortName, args, targetPos, camPos)
                         else
                             for i = 1, #args do
                                 local nv, ch = rewriteValue(args[i], targetPos, camPos, 1)
@@ -875,7 +912,7 @@ local subBrand = new("TextLabel", {
     BackgroundTransparency = 1,
     Position = UDim2.new(0, 16, 0, 24),
     Size = UDim2.new(0, 300, 0, 12),
-    Text = "оперативный контур // v5.3",
+    Text = "оперативный контур // v5.4",
     TextColor3 = P.SubText, Font = Enum.Font.Gotham,
     TextSize = 9, TextXAlignment = Enum.TextXAlignment.Left,
 })
