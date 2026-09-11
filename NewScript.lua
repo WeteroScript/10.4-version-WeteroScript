@@ -22,7 +22,6 @@ local Players      = game:GetService("Players")
 local RunService   = game:GetService("RunService")
 local UIS          = game:GetService("UserInputService")
 local TS           = game:GetService("TweenService")
-local WS           = game:GetService("Workspace")
 local TeleportSvc  = game:GetService("TeleportService")
 
 local LP = Players.LocalPlayer
@@ -30,9 +29,6 @@ if not LP then repeat task.wait(0.1); LP = Players.LocalPlayer until LP end
 if not game:IsLoaded() then game.Loaded:Wait() end
 task.wait(0.4)
 
---=============================================================
--- GUI КОНТЕЙНЕРЫ
---=============================================================
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "MerediosHUD"
 ScreenGui.ResetOnSpawn = false
@@ -60,9 +56,6 @@ do
     end
 end
 
---=============================================================
--- ТЕМА
---=============================================================
 local Theme = { mode = "Light", accent = "Cyan", anim = true }
 
 local Palettes = {
@@ -172,9 +165,6 @@ local function applyTheme()
     end
 end
 
---=============================================================
--- LOGGER
---=============================================================
 local Logger = {
     buffer = { server = {}, script = {} },
     maxLen = 100,
@@ -236,20 +226,17 @@ local function summarizeArgs(args, n)
 end
 
 --=============================================================
--- HITBOX CHANGER — ФИКС
+-- HITBOX CHANGER
 --=============================================================
 local HitboxChanger = { Enabled = false, View = false, Size = 12, Original = {} }
 
--- ФИКС: фильтрует nil чтобы ipairs не останавливался
 local function hitboxParts(char)
     if not char then return {} end
     local list = {}
     local names = { "HumanoidRootPart", "Head", "UpperTorso", "Torso", "LowerTorso" }
     for _, name in ipairs(names) do
         local p = char:FindFirstChild(name)
-        if p and p:IsA("BasePart") then
-            table.insert(list, p)
-        end
+        if p and p:IsA("BasePart") then table.insert(list, p) end
     end
     return list
 end
@@ -257,20 +244,13 @@ end
 local function applyHitboxToChar(char)
     if not char then return end
     for _, part in ipairs(hitboxParts(char)) do
-        if part:IsA("BasePart") then
-            if not HitboxChanger.Original[part] then
-                HitboxChanger.Original[part] = {
-                    Size = part.Size,
-                    Transparency = part.Transparency,
-                }
-            end
-            part.Size = Vector3.new(HitboxChanger.Size, HitboxChanger.Size, HitboxChanger.Size)
-            part.Transparency = 1
-            -- ФИКС: НЕ трогаем CanCollide.
-            -- ФИКС: явно разрешаем raycast'ам попадать в эту часть.
-            part.CanQuery = true
-            part.CanTouch = true
+        if not HitboxChanger.Original[part] then
+            HitboxChanger.Original[part] = { Size = part.Size, Transparency = part.Transparency }
         end
+        part.Size = Vector3.new(HitboxChanger.Size, HitboxChanger.Size, HitboxChanger.Size)
+        part.Transparency = 1
+        part.CanQuery = true
+        part.CanTouch = true
     end
 end
 
@@ -431,18 +411,12 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
---=============================================================
--- RAPID FIRE
---=============================================================
 local RapidFire = {
     Enabled = false,
     Multiplier = 5,
     Delay = 0.05,
 }
 
---=============================================================
--- ХУКИ ПЛЕЙЕРОВ
---=============================================================
 local function hookPlayerForCombat(plr)
     plr.CharacterAdded:Connect(function(char)
         task.wait(0.25)
@@ -506,9 +480,7 @@ local function installHook()
                 shortName = fullName:match("([^%.]+)$") or fullName
             end)
 
-            if not parseOk then
-                return oldNC(self, ...)
-            end
+            if not parseOk then return oldNC(self, ...) end
 
             if RapidFire.Enabled and shortName == "WeaponReloadRequest" then
                 logScript("Reload blocked")
@@ -1045,7 +1017,6 @@ local combatList = new("UIListLayout", {
 })
 combatList.Parent = combatPage
 
--- HITBOX
 do
     local card = makeCard(combatPage, 1, "HITBOX CHANGER")
 
@@ -1110,7 +1081,6 @@ do
     viewBtn.MouseButton1Click:Connect(function() setView(not viewState) end)
 end
 
--- RAPID FIRE
 do
     local card = makeCard(combatPage, 2, "RAPID FIRE")
 
@@ -1139,7 +1109,6 @@ do
     end)
 end
 
--- ESP
 do
     local card = makeCard(combatPage, 3, "ESP")
     makeSwitch(card, 36, function(v)
