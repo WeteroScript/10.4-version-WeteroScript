@@ -1,5 +1,5 @@
 --[[
-    MEREDIOS v5.5 — оперативный контур
+    MEREDIOS v5.6 — оперативный контур
     Roblox / Delta X Mobile
 --]]
 
@@ -295,6 +295,7 @@ local SilentAim = {
     TeamCheck=true, Smoothness=0.15, HitChance=100,
     CircleColor=Color3.fromRGB(0,210,255), Current=nil, Highlight=nil,
     Headshot = true,
+    CameraLock = true,
 }
 
 local ESP = { Enabled = false, Color = Color3.fromRGB(255, 60, 60), Guis = {} }
@@ -396,6 +397,29 @@ local function findTarget()
 end
 
 --=============================================================
+-- CAMERA LOCK
+--=============================================================
+local camLockUntil = 0
+
+local function triggerCamLock()
+    if not SilentAim.CameraLock then return end
+    camLockUntil = os.clock() + 0.06
+end
+
+RunService.RenderStepped:Connect(function()
+    if not SilentAim.CameraLock then return end
+    if not SilentAim.Enabled or not SilentAim.Current then return end
+    if os.clock() >= camLockUntil then return end
+
+    local aimPart = getHeadPart(SilentAim.Current.Character)
+    if aimPart then
+        local fromPos = Cam.CFrame.Position
+        local toPos = aimPart.Position
+        Cam.CFrame = CFrame.lookAt(fromPos, toPos)
+    end
+end)
+
+--=============================================================
 -- ХУК __namecall — ТОЧЕЧНЫЙ ПОД FORTLINE
 --=============================================================
 local hooked = false
@@ -479,14 +503,16 @@ local function handleFortlineRemote(shortName, args, targetPos, camPos)
                     local newDir = (targetPos - fromOrigin).Unit
                     if setField(a, "dir", newDir) then modified = true end
                     if setField(a, "direction", newDir) then modified = true end
+                    triggerCamLock()
                 end
             end
         end
     elseif shortName == "WeaponHit" then
+        local targetPlr = SilentAim.Current
         for i = 1, #args do
             local a = args[i]
             if typeof(a) == "table" then
-                local aimPart = SilentAim.Current and getHeadPart(SilentAim.Current.Character)
+                local aimPart = targetPlr and getHeadPart(targetPlr.Character)
                 local hitPos = aimPart and aimPart.Position or targetPos
                 if setField(a, "p", hitPos) then modified = true end
                 if setField(a, "pos", hitPos) then modified = true end
@@ -496,8 +522,12 @@ local function handleFortlineRemote(shortName, args, targetPos, camPos)
                     if setField(a, "part", "Head") then modified = true end
                 end
 
-                -- maxDist НЕ трогаем — это лимит оружия, не дистанция попадания.
-                -- d пересчитываем от origin последнего выстрела.
+                -- pid → UserId цели
+                if targetPlr then
+                    if setField(a, "pid", targetPlr.UserId) then modified = true end
+                end
+
+                -- d пересчитываем от origin последнего выстрела
                 if lastOrigin then
                     local newD = (hitPos - lastOrigin).Magnitude
                     if setField(a, "d", newD) then modified = true end
@@ -904,7 +934,7 @@ local subBrand = new("TextLabel", {
     BackgroundTransparency = 1,
     Position = UDim2.new(0, 16, 0, 24),
     Size = UDim2.new(0, 300, 0, 12),
-    Text = "оперативный контур // v5.5",
+    Text = "оперативный контур // v5.6",
     TextColor3 = P.SubText, Font = Enum.Font.Gotham,
     TextSize = 9, TextXAlignment = Enum.TextXAlignment.Left,
 })
