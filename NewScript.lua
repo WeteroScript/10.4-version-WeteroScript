@@ -1450,4 +1450,248 @@ sectionHeader(pgCombat, 10, "combat", C.a3)
 toggleCard(pgCombat, 32, "Fling", "мягкий толчок игроков", C.a1, C.a2, false, function(v)
     if v then startFling() else stopFling() end
 end)
-toggleCard(pgCombat, 92, "Aimbot", "плавное наведение камеры", C.a2, C.a4, false, function(v) aimbot
+toggleCard(pgCombat, 92, "Aimbot", "плавное наведение камеры", C.a2, C.a4, false, function(v) aimbotOn = v end)
+sliderCard(pgCombat, 152, "Aim Strength", 5, 50, 25, C.a2, function(v) aimbotStrength = v end)
+toggleCard(pgCombat, 212, "Hitbox Expand", "увеличивает хитбокс игроков", C.a3, C.a1, false, function(v)
+    hitboxOn = v; applyHitbox()
+end)
+sliderCard(pgCombat, 272, "Hitbox Size", 3, 20, 8, C.a3, function(v)
+    hitboxSize = v; if hitboxOn then applyHitbox() end
+end)
+finalizePage(pgCombat, 342)
+
+sectionHeader(pgVisual, 10, "visual", C.a2)
+toggleCard(pgVisual, 32, "Player ESP", "подсветка игроков сквозь стены", C.a1, C.a3, false, function(v)
+    espOn = v; applyESP()
+end)
+finalizePage(pgVisual, 102)
+
+sectionHeader(pgEggs, 10, "steal an egg", C.amber)
+toggleCard(pgEggs, 32, "Stealth Mode", "обход анти-чита", C.green, C.a4, true, function(v) stealthOn = v end)
+toggleCard(pgEggs, 92, "Speed Boost", "ускорение с обходом", C.green, C.a2, false, function(v)
+    speedOn = v
+    if v then startSpeed() else stopSpeed() end
+end)
+sliderCard(pgEggs, 152, "Speed Value", 20, 200, 60, C.a2, function(v)
+    speedValue = v
+end)
+toggleCard(pgEggs, 212, "Paranoid Mode", "максимальная осторожность", C.amber, C.red, false, function(v)
+    paranoidOn = v
+    if v then stealthOn = true end
+end)
+toggleCard(pgEggs, 272, "Egg ESP", "подсвечивает свободные яйца", C.amber, C.a3, false, function(v)
+    eggESPOn = v; applyEggESP()
+end)
+toggleCard(pgEggs, 332, "Auto Collect", "собирает яйца рядом", C.a2, C.a4, false, function(v)
+    if v then startAutoCollect() else stopAutoCollect() end
+end)
+toggleCard(pgEggs, 392, "Farm Loop", "дальнее яйцо → собрать → база", C.amber, C.a1, false, function(v)
+    if v then startCollectFar() else stopCollectFar() end
+end)
+actionCard(pgEggs, 452, "TP to Egg", "телепорт к ближайшему свободному яйцу", C.amber, C.a3, tpToNearestEgg)
+actionCard(pgEggs, 508, "TP to Base", "телепорт на свою базу", C.a2, C.a4, tpToBase)
+
+local statusCard = mk("Frame", {
+    Size = UDim2.new(1, -28, 0, 26), Position = UDim2.new(0, 14, 0, 564),
+    BackgroundColor3 = C.surface, BackgroundTransparency = 0.4,
+    BorderSizePixel = 0, ZIndex = 4, Parent = pgEggs,
+})
+corner(statusCard, 10); stroke(statusCard, C.line, 1, 0.5)
+statusLabelRef = mk("TextLabel", {
+    Size = UDim2.new(1, -16, 1, 0), Position = UDim2.new(0, 8, 0, 0),
+    BackgroundTransparency = 1, Font = Enum.Font.GothamMedium, TextSize = 10,
+    TextColor3 = C.dim, TextXAlignment = Enum.TextXAlignment.Left,
+    Text = "0 eggs · 0 free · far 0 · idle", ZIndex = 5, Parent = statusCard,
+})
+finalizePage(pgEggs, 614)
+
+task.spawn(function()
+    while screen.Parent do
+        task.wait(0.5)
+        if not collectFarOn then
+            local char = LocalPlayer.Character
+            local hrp = char and char:FindFirstChild("HumanoidRootPart")
+            if hrp then
+                local total, free = 0, 0
+                for _, v in ipairs(Workspace:GetDescendants()) do
+                    if v:IsA("Model") then
+                        local low = v.Name:lower()
+                        local looksEgg = low:find("egg") ~= nil
+                        if not looksEgg then
+                            for _, word in ipairs(EGG_NAMES_EXTRA) do
+                                if low:find(word, 1, true) then looksEgg = true; break end
+                            end
+                        end
+                        if looksEgg and v:FindFirstChildWhichIsA("BasePart") then
+                            total = total + 1
+                            if not isOwnedEgg(v) then free = free + 1 end
+                        end
+                    end
+                end
+                eggStats.found = total
+                eggStats.spawnable = free
+            end
+        end
+        updateStatus()
+    end
+end)
+
+makeTabBtn("home", "HOME", 8)
+makeTabBtn("combat", "COMBAT", 44)
+makeTabBtn("visual", "VISUAL", 80)
+makeTabBtn("eggs", "EGGS", 116)
+
+do
+    local dragging = false
+    local dragStart, startPos
+    track(titleBar.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1
+        or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true; dragStart = input.Position; startPos = main.Position
+        end
+    end))
+    track(UserInputService.InputChanged:Connect(function(input)
+        if not dragging then return end
+        if input.UserInputType ~= Enum.UserInputType.MouseMovement
+        and input.UserInputType ~= Enum.UserInputType.Touch then return end
+        local d = input.Position - dragStart
+        main.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X, startPos.Y.Scale, startPos.Y.Offset + d.Y)
+        ring.Position = UDim2.new(main.Position.X.Scale, main.Position.X.Offset - 3, main.Position.Y.Scale, main.Position.Y.Offset - 3)
+        glow2.Position = UDim2.new(main.Position.X.Scale, main.Position.X.Offset - 16, main.Position.Y.Scale, main.Position.Y.Offset - 16)
+        glow3.Position = UDim2.new(main.Position.X.Scale, main.Position.X.Offset - 28, main.Position.Y.Scale, main.Position.Y.Offset - 28)
+    end))
+    track(UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1
+        or input.UserInputType == Enum.UserInputType.Touch then dragging = false end
+    end))
+end
+
+local MS = 58
+local mBtn = mk("TextButton", {
+    Name = "MToggle", Size = UDim2.new(0, MS, 0, MS),
+    Position = UDim2.new(0, 20, 0.5, -MS/2),
+    BackgroundColor3 = C.a1, BorderSizePixel = 0, Text = "M",
+    Font = Enum.Font.GothamBold, TextSize = 23, TextColor3 = C.text,
+    AutoButtonColor = false, ZIndex = 60, Parent = screen,
+})
+corner(mBtn, MS / 2)
+local mGrad = mk("UIGradient", {Parent = mBtn})
+mGrad.Color = ColorSequence.new({
+    ColorSequenceKeypoint.new(0.00, C.a1), ColorSequenceKeypoint.new(0.5, C.a2),
+    ColorSequenceKeypoint.new(1.00, C.a3),
+})
+local mRing = mk("Frame", {
+    Size = UDim2.new(1, 16, 1, 16), Position = UDim2.new(0, -8, 0, -8),
+    BackgroundColor3 = C.a1, BackgroundTransparency = 0.55,
+    BorderSizePixel = 0, ZIndex = 59, Parent = mBtn,
+})
+corner(mRing, (MS + 16) / 2)
+local mRingGrad = mk("UIGradient", {Parent = mRing})
+mRingGrad.Color = ColorSequence.new({
+    ColorSequenceKeypoint.new(0.00, C.a1), ColorSequenceKeypoint.new(0.5, C.a2),
+    ColorSequenceKeypoint.new(1.00, C.a3),
+})
+local mInner = mk("Frame", {
+    Size = UDim2.new(1, -18, 1, -18), Position = UDim2.new(0, 9, 0, 9),
+    BackgroundColor3 = C.bg, BackgroundTransparency = 0.6,
+    BorderSizePixel = 0, ZIndex = 61, Parent = mBtn,
+})
+corner(mInner, (MS - 18) / 2)
+task.spawn(function()
+    while mBtn.Parent do
+        tween(mGrad, 5, {Rotation = mGrad.Rotation + 360}, Enum.EasingStyle.Linear)
+        tween(mRingGrad, 5, {Rotation = mRingGrad.Rotation + 360}, Enum.EasingStyle.Linear)
+        task.wait(5)
+    end
+end)
+task.spawn(function()
+    while mRing.Parent do
+        tween(mRing, 1.6, {BackgroundTransparency = 0.4}, Enum.EasingStyle.Sine); task.wait(1.6)
+        tween(mRing, 1.6, {BackgroundTransparency = 0.72}, Enum.EasingStyle.Sine); task.wait(1.6)
+    end
+end)
+mBtn.MouseEnter:Connect(function() tween(mBtn, 0.22, {Size = UDim2.new(0, MS + 6, 0, MS + 6)}, Enum.EasingStyle.Quint) end)
+mBtn.MouseLeave:Connect(function() tween(mBtn, 0.22, {Size = UDim2.new(0, MS, 0, MS)}, Enum.EasingStyle.Quint) end)
+
+local isOpen = true
+local OPEN_TIME = 0.32
+local VISIBLE_PARTS = {main, ring, glow2, glow3}
+local function setAllVisible(v) for _, o in ipairs(VISIBLE_PARTS) do o.Visible = v end end
+
+local function closeUI()
+    if not isOpen then return end
+    isOpen = false
+    local tws = {
+        TweenService:Create(main, TweenInfo.new(OPEN_TIME, Enum.EasingStyle.Quint), {BackgroundTransparency = 1}),
+        TweenService:Create(mainScale, TweenInfo.new(OPEN_TIME, Enum.EasingStyle.Quint), {Scale = 0.86}),
+        TweenService:Create(ring, TweenInfo.new(OPEN_TIME, Enum.EasingStyle.Quint), {BackgroundTransparency = 1}),
+        TweenService:Create(glow2, TweenInfo.new(OPEN_TIME, Enum.EasingStyle.Quint), {BackgroundTransparency = 1}),
+        TweenService:Create(glow3, TweenInfo.new(OPEN_TIME, Enum.EasingStyle.Quint), {BackgroundTransparency = 1}),
+    }
+    for _, tw in ipairs(tws) do tw:Play() end
+    task.delay(OPEN_TIME + 0.02, function()
+        if not screen.Parent then return end
+        setAllVisible(false)
+        main.BackgroundTransparency = 0
+        mainScale.Scale = 0.86
+        ring.BackgroundTransparency = 0
+        glow2.BackgroundTransparency = 0.9
+        glow3.BackgroundTransparency = 0.94
+    end)
+end
+local function openUI()
+    if isOpen then return end
+    isOpen = true
+    setAllVisible(true)
+    main.BackgroundTransparency = 1; mainScale.Scale = 0.86
+    ring.BackgroundTransparency = 1
+    glow2.BackgroundTransparency = 1; glow3.BackgroundTransparency = 1
+    local tws = {
+        TweenService:Create(main, TweenInfo.new(OPEN_TIME, Enum.EasingStyle.Quint), {BackgroundTransparency = 0}),
+        TweenService:Create(mainScale, TweenInfo.new(OPEN_TIME, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Scale = 1}),
+        TweenService:Create(ring, TweenInfo.new(OPEN_TIME, Enum.EasingStyle.Quint), {BackgroundTransparency = 0}),
+        TweenService:Create(glow2, TweenInfo.new(OPEN_TIME, Enum.EasingStyle.Quint), {BackgroundTransparency = 0.9}),
+        TweenService:Create(glow3, TweenInfo.new(OPEN_TIME, Enum.EasingStyle.Quint), {BackgroundTransparency = 0.94}),
+    }
+    for _, tw in ipairs(tws) do tw:Play() end
+end
+closeBtn.MouseButton1Click:Connect(closeUI)
+
+do
+    local dragging, moved = false, false
+    local start, startPos
+    mBtn.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1
+        or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true; moved = false
+            start = input.Position; startPos = mBtn.Position
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(input)
+        if not dragging then return end
+        if input.UserInputType ~= Enum.UserInputType.MouseMovement
+        and input.UserInputType ~= Enum.UserInputType.Touch then return end
+        local d = input.Position - start
+        if math.abs(d.X) > 5 or math.abs(d.Y) > 5 then moved = true end
+        if moved then
+            mBtn.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X, startPos.Y.Scale, startPos.Y.Offset + d.Y)
+        end
+    end)
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1
+        or input.UserInputType == Enum.UserInputType.Touch then dragging = false end
+    end)
+    mBtn.MouseButton1Click:Connect(function()
+        if moved then return end
+        if isOpen then closeUI() else openUI() end
+    end)
+end
+
+UserInputService.InputBegan:Connect(function(input, gpe)
+    if gpe then return end
+    if input.KeyCode == Enum.KeyCode.M then
+        if isOpen then closeUI() else openUI() end
+    end
+end)
+
+switchTab("home")
