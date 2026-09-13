@@ -1,5 +1,5 @@
 --[[
-    MEREDIOS v7.4 — оперативный контур
+    MEREDIOS v7.5 — оперативный контур
     Roblox / Delta X Mobile
     t.me//meredioshub
 --]]
@@ -91,6 +91,12 @@ local GradientColors = ColorSequence.new({
     ColorSequenceKeypoint.new(1.00, Color3.fromRGB(160, 95, 255)),
 })
 
+local BluePinkSeq = ColorSequence.new({
+    ColorSequenceKeypoint.new(0.00, Color3.fromRGB(20, 45, 130)),
+    ColorSequenceKeypoint.new(0.45, Color3.fromRGB(90, 130, 240)),
+    ColorSequenceKeypoint.new(1.00, Color3.fromRGB(255, 95, 175)),
+})
+
 local P, Accent
 local function refreshPalettes() P = Palettes[Theme.mode]; Accent = Accents[Theme.accent] end
 refreshPalettes()
@@ -165,6 +171,7 @@ local function reg(inst, prop, key)
 end
 
 local SwitchRegistry = {}
+local LogTabButtons = {}    -- ФИКС №5
 
 local function applyTheme()
     refreshPalettes()
@@ -178,6 +185,12 @@ local function applyTheme()
             s.knob.BackgroundColor3 = P.Knob
             s.lbl.TextColor3 = s.state and Accent.Main or P.SubText
         end
+    end
+    -- ФИКС №5: перекраска tab-кнопок LOG
+    for _, entry in ipairs(LogTabButtons) do
+        local active = (entry.name == Logger.activeTab)
+        entry.btn.BackgroundColor3 = active and Accent.Main or P.Card
+        entry.btn.TextColor3 = active and Color3.fromRGB(255,255,255) or P.SubText
     end
 end
 
@@ -334,7 +347,7 @@ local function refreshAllHitboxViews()
 end
 
 --=============================================================
--- ESP v7.4
+-- ESP v7.5
 --=============================================================
 local VISIBLE_COLOR = Color3.fromRGB(80, 220, 100)
 
@@ -366,6 +379,7 @@ local function espPaletteCurrent()
     return list
 end
 
+-- ФИКС №3: уточнённая проверка hit.Instance:IsA("BasePart")
 local function hasLineOfSight(char)
     if not char then return false end
     local cam = workspace.CurrentCamera
@@ -381,7 +395,8 @@ local function hasLineOfSight(char)
         if part and part:IsA("BasePart") then
             local dir = part.Position - origin
             local hit = workspace:Raycast(origin, dir, params)
-            if hit and hit.Instance and hit.Instance:IsDescendantOf(char) then
+            if hit and hit.Instance and hit.Instance:IsA("BasePart")
+               and hit.Instance:IsDescendantOf(char) then
                 return true
             end
         end
@@ -508,10 +523,9 @@ RunService.Heartbeat:Connect(function()
 end)
 
 --=============================================================
--- WALLBANG v7.4 + remote diagnostics
+-- WALLBANG + diagnostics
 --=============================================================
 local Wallbang = { Enabled = false, Active = false }
-
 local RemoteDiag = { Enabled = false, Count = 0, Max = 80, Window = 0 }
 
 local function fmtArg(a)
@@ -521,7 +535,8 @@ local function fmtArg(a)
     elseif t == "CFrame" then
         return "CFrame"
     elseif t == "Instance" then
-        return a:GetFullName()
+        local ok, n = pcall(function() return a:GetFullName() end)
+        return ok and n or "Instance"
     elseif t == "table" then
         return "{table}"
     else
@@ -534,10 +549,12 @@ local function logRemoteFire(self, args)
     if RemoteDiag.Count >= RemoteDiag.Max then return end
     if tick() > RemoteDiag.Window then return end
     RemoteDiag.Count = RemoteDiag.Count + 1
-
     local parts = {}
     for i, a in ipairs(args) do parts[i] = fmtArg(a) end
-    logScript("FireServer→" .. self:GetFullName() .. " | " .. table.concat(parts, ", "))
+    local full
+    local ok = pcall(function() full = self:GetFullName() end)
+    if not ok then full = "Unknown" end
+    logScript("FireServer→" .. full .. " | " .. table.concat(parts, ", "))
 end
 
 local function buildWallbangParams(originalParams)
@@ -563,11 +580,9 @@ do
             pcall(setreadonly, mt, false)
             mt.__namecall = newcclosure(function(self, ...)
                 local method = getnamecallmethod and getnamecallmethod() or nil
-
                 if method == "FireServer" and RemoteDiag.Enabled then
                     logRemoteFire(self, {...})
                 end
-
                 if Wallbang.Enabled and Wallbang.Active and method == "Raycast" then
                     local ok, isWorkspace = pcall(function() return self == workspace end)
                     if ok and isWorkspace then
@@ -577,7 +592,6 @@ do
                         return oldNamecall(self, origin, direction, newParams)
                     end
                 end
-
                 return oldNamecall(self, ...)
             end)
             pcall(setreadonly, mt, true)
@@ -589,17 +603,19 @@ do
 end
 
 --=============================================================
--- AIMBOT
+-- AIMBOT v7.5 — hard-lock via Camera priority + real-input release
 --=============================================================
 local Aimbot = {
     Enabled = false,
     FOV = 140,
     Color = Color3.fromRGB(30, 64, 175),
-    SensThreshold = 15,
+    ReleaseThreshold = 45,
+    ReleaseWindow = 0.12,
+    MoveAccum = 0,
     LockReleaseUntil = 0,
     AdjustUntil = 0,
     Target = nil,
-    LastMouse = nil,
+    ActiveGameTouch = nil,
 }
 
 local fovCircle = new("Frame", {
@@ -614,9 +630,7 @@ local fovCircle = new("Frame", {
 })
 round(fovCircle, Aimbot.FOV)
 local fovStroke = new("UIStroke", {
-    Thickness = 3,
-    Color = Aimbot.Color,
-    Transparency = 0,
+    Thickness = 3, Color = Aimbot.Color, Transparency = 0,
     ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
     LineJoinMode = Enum.LineJoinMode.Round,
 })
@@ -625,15 +639,11 @@ local fovGlow = new("Frame", {
     AnchorPoint = Vector2.new(0.5, 0.5),
     Position = UDim2.new(0.5, 0, 0.5, 0),
     Size = UDim2.new(1, -6, 1, -6),
-    BackgroundTransparency = 1,
-    BorderSizePixel = 0,
-    ZIndex = 5001,
+    BackgroundTransparency = 1, BorderSizePixel = 0, ZIndex = 5001,
 })
 round(fovGlow, Aimbot.FOV - 3)
 local fovGlowStroke = new("UIStroke", {
-    Thickness = 1,
-    Color = Aimbot.Color,
-    Transparency = 0.55,
+    Thickness = 1, Color = Aimbot.Color, Transparency = 0.55,
     ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
     LineJoinMode = Enum.LineJoinMode.Round,
 })
@@ -685,12 +695,40 @@ local function snapCameraTo(plr)
     local cam = workspace.CurrentCamera
     local pos = getHeadPos(plr)
     if not cam or not pos then return end
-    cam.CFrame = CFrame.new(cam.CFrame.Position, pos)
+    local camPos = cam.CFrame.Position
+    local targetCF = CFrame.new(camPos, pos)
+    -- обнуляем roll
+    local rx, ry, _ = targetCF:ToOrientation()
+    cam.CFrame = CFrame.fromOrientation(rx, ry, 0) + camPos
 end
+
+-- трекинг реального ввода
+UIS.InputBegan:Connect(function(input, gpe)
+    if gpe then return end
+    if input.UserInputType == Enum.UserInputType.Touch then
+        Aimbot.ActiveGameTouch = input
+    end
+end)
+UIS.InputEnded:Connect(function(input)
+    if input == Aimbot.ActiveGameTouch then
+        Aimbot.ActiveGameTouch = nil
+    end
+end)
+UIS.InputChanged:Connect(function(input, gpe)
+    if gpe then return end
+    if not Aimbot.Enabled then return end
+    if input.UserInputType == Enum.UserInputType.MouseMovement then
+        local d = input.Delta.Magnitude
+        if d > 1.5 then Aimbot.MoveAccum = Aimbot.MoveAccum + d end
+    elseif input == Aimbot.ActiveGameTouch then
+        local d = input.Delta.Magnitude
+        if d > 1.5 then Aimbot.MoveAccum = Aimbot.MoveAccum + d end
+    end
+end)
 
 local prevTargetLogged = nil
 
-RunService.RenderStepped:Connect(function()
+local function aimbotStep()
     local now = tick()
 
     if Aimbot.Enabled and now < Aimbot.AdjustUntil then
@@ -699,19 +737,24 @@ RunService.RenderStepped:Connect(function()
         fovCircle.Visible = false
     end
 
-    if not Aimbot.Enabled then return end
-    if UIS.GetFocusedTextBox and UIS:GetFocusedTextBox() then Aimbot.Target = nil; return end
-
-    local mouse = UIS:GetMouseLocation()
-    if Aimbot.LastMouse then
-        local d = (mouse - Aimbot.LastMouse).Magnitude
-        if d > Aimbot.SensThreshold then Aimbot.LockReleaseUntil = now + 0.25 end
+    -- ФИКС №2: сброс MoveAccum при выключении
+    if not Aimbot.Enabled then
+        Aimbot.MoveAccum = 0
+        Aimbot.Target = nil
+        prevTargetLogged = nil
+        return
     end
-    Aimbot.LastMouse = mouse
+
+    if UIS.GetFocusedTextBox and UIS:GetFocusedTextBox() then return end
+
+    if Aimbot.MoveAccum >= Aimbot.ReleaseThreshold then
+        Aimbot.LockReleaseUntil = now + Aimbot.ReleaseWindow
+        Aimbot.MoveAccum = 0
+    end
 
     if now < Aimbot.LockReleaseUntil then
         if Aimbot.Target and prevTargetLogged then
-            logScript("Aimbot released")
+            logScript("Aimbot release")
             prevTargetLogged = nil
         end
         Aimbot.Target = nil
@@ -730,7 +773,10 @@ RunService.RenderStepped:Connect(function()
     else
         prevTargetLogged = nil
     end
-end)
+end
+
+pcall(function() RunService:UnbindFromRenderStep("MerediosAimbot") end)
+RunService:BindToRenderStep("MerediosAimbot", Enum.RenderPriority.Camera.Value + 1, aimbotStep)
 
 --=============================================================
 -- PLAYER HOOKS
@@ -773,7 +819,22 @@ end)
 Players.PlayerRemoving:Connect(function(plr)
     logServer(plr.Name .. " left")
     hookedPlayers[plr] = nil
-    if plr.Character then restoreHitboxForChar(plr.Character) end
+
+    -- ФИКС №4: принудительная очистка Originals даже если Character=nil
+    for part, _ in pairs(HitboxChanger.Original) do
+        if part and part.Parent and plr.Character
+           and part:IsDescendantOf(plr.Character) then
+            pcall(function()
+                local orig = HitboxChanger.Original[part]
+                part.Size = orig.Size
+                part.Transparency = orig.Transparency
+                part.CanCollide = orig.CanCollide
+                part.CanQuery = orig.CanQuery
+            end)
+            HitboxChanger.Original[part] = nil
+        end
+    end
+
     if ESP.Highlights[plr] then
         pcall(function() ESP.Highlights[plr]:Destroy() end)
         ESP.Highlights[plr] = nil
@@ -824,7 +885,7 @@ local startupSub = new("TextLabel", {
     BackgroundTransparency = 1,
     Position = UDim2.new(0, -40, 0, 50),
     Size = UDim2.new(1, -44, 0, 12),
-    Text = "// meridian core v7.4 · t.me//meredioshub",
+    Text = "// meridian core v7.5 · t.me//meredioshub",
     TextColor3 = P.SubText,
     Font = Enum.Font.Code, TextSize = 9,
     TextXAlignment = Enum.TextXAlignment.Left, TextTransparency = 1,
@@ -914,7 +975,7 @@ local subBrand = new("TextLabel", {
     BackgroundTransparency = 1,
     Position = UDim2.new(0, 18, 0, 28),
     Size = UDim2.new(0, 320, 0, 12),
-    Text = "v7.4 // t.me//meredioshub",
+    Text = "v7.5 // t.me//meredioshub",
     TextColor3 = P.SubText,
     Font = Enum.Font.Code, TextSize = 9,
     TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 2,
@@ -1158,6 +1219,7 @@ local function makeSwitch(card, y, onChanged, initial)
     return set
 end
 
+-- ФИКС №1: slider InputChanged — guard до обработки, утечки нет
 local function makeSlider(card, y, min, max, initial, onChange)
     local track = new("Frame", {
         Position = UDim2.new(0, 12, 0, y),
@@ -1218,6 +1280,7 @@ local function makeSlider(card, y, min, max, initial, onChange)
         end
     end)
     UIS.InputEnded:Connect(function(input)
+        if not dragging then return end
         local t = input.UserInputType
         if t == Enum.UserInputType.MouseButton1 or t == Enum.UserInputType.Touch then
             dragging = false
@@ -1353,7 +1416,6 @@ local serverTabBtn = new("TextButton", {
 round(serverTabBtn, 9)
 gradientStroke(serverTabBtn, 1, 0.5, 30)
 serverTabBtn.Parent = logPage
-reg(serverTabBtn, "BackgroundColor3", "Card"); reg(serverTabBtn, "TextColor3", "SubText")
 
 local scriptTabBtn = new("TextButton", {
     Position = UDim2.new(0.32, 0, 1, -28),
@@ -1366,6 +1428,10 @@ local scriptTabBtn = new("TextButton", {
 round(scriptTabBtn, 9)
 gradientStroke(scriptTabBtn, 1, 0.3, 30)
 scriptTabBtn.Parent = logPage
+
+-- ФИКС №5: регистрируем для перекраски при смене темы
+table.insert(LogTabButtons, { name = "server", btn = serverTabBtn })
+table.insert(LogTabButtons, { name = "script", btn = scriptTabBtn })
 
 local copyBtn = new("TextButton", {
     Position = UDim2.new(0.64, 0, 1, -28),
@@ -1426,16 +1492,11 @@ end
 
 local function switchLogTab(which)
     Logger.activeTab = which
-    if which == "server" then
-        serverTabBtn.BackgroundColor3 = Accent.Main; serverTabBtn.BackgroundTransparency = 0.05
-        serverTabBtn.TextColor3 = Color3.fromRGB(255,255,255)
-        scriptTabBtn.BackgroundColor3 = P.Card; scriptTabBtn.BackgroundTransparency = 0.15
-        scriptTabBtn.TextColor3 = P.SubText
-    else
-        scriptTabBtn.BackgroundColor3 = Accent.Main; scriptTabBtn.BackgroundTransparency = 0.05
-        scriptTabBtn.TextColor3 = Color3.fromRGB(255,255,255)
-        serverTabBtn.BackgroundColor3 = P.Card; serverTabBtn.BackgroundTransparency = 0.15
-        serverTabBtn.TextColor3 = P.SubText
+    for _, entry in ipairs(LogTabButtons) do
+        local active = (entry.name == which)
+        entry.btn.BackgroundColor3 = active and Accent.Main or P.Card
+        entry.btn.BackgroundTransparency = active and 0.05 or 0.15
+        entry.btn.TextColor3 = active and Color3.fromRGB(255,255,255) or P.SubText
     end
     renderLog()
 end
@@ -1477,10 +1538,10 @@ new("UIListLayout", {
     SortOrder = Enum.SortOrder.LayoutOrder,
 }).Parent = combatPage
 
--- HITBOX CHANGER
+-- HITBOX
 do
     local card = makeCard(combatPage, 1, "HITBOX CHANGER",
-        "увеличивает хитбокс игроков. VIEW — показать границы.", nil, 96)
+        "увеличивает хитбокс игроков. VIEW — показать границы.", 96)
 
     local box = new("TextBox", {
         Position = UDim2.new(0, 12, 0, 46),
@@ -1544,11 +1605,10 @@ do
     viewBtn.MouseButton1Click:Connect(function() setView(not viewState) end)
 end
 
--- ESP v7.4
+-- ESP
 do
     local card = makeCard(combatPage, 2, "ESP",
-        "подсвечивает игроков. зелёный = доступен для стрельбы (виден из-за стены).",
-        nil, 200)
+        "подсвечивает игроков. зелёный = доступен для стрельбы (виден из-за стены).", 200)
 
     makeSwitch(card, 46, function(v)
         ESP.Enabled = v
@@ -1567,7 +1627,6 @@ do
     visLbl.Parent = card
     reg(visLbl, "TextColor3", "SubText")
 
-    -- forward decl: свитч вызовет rebuildESPPalette до его объявления
     local rebuildESPPalette
 
     makeSwitch(card, 94, function(v)
@@ -1608,7 +1667,6 @@ do
             pcall(function() s.btn:Destroy() end)
         end
         swatchMap = {}
-
         local list = espPaletteCurrent()
         for i, entry in ipairs(list) do
             local swatch = new("TextButton", {
@@ -1625,13 +1683,10 @@ do
             })
             st.Parent = swatch
             swatch.Parent = palRow
-
             local isCur = (entry.color == ESP.Color)
             st.Transparency = isCur and 0 or 0.6
             st.Thickness = isCur and 2 or 1
-
             swatchMap[entry.name] = { btn = swatch, stroke = st, entry = entry }
-
             swatch.MouseButton1Click:Connect(function()
                 ESP.Color = entry.color
                 for _, s in pairs(swatchMap) do
@@ -1648,11 +1703,10 @@ do
     task.defer(rebuildESPPalette)
 end
 
--- WALLBANG v7.4
+-- WALLBANG
 do
     local card = makeCard(combatPage, 3, "WALLBANG",
-        "хук на Raycast. если не ловится — включи DIAG, жми ЛКМ в игре, потом DUMP.",
-        nil, 240)
+        "хук на Raycast. если не ловится — включи DIAG, жми ЛКМ в игре, потом DUMP.", 240)
 
     makeSwitch(card, 46, function(v)
         Wallbang.Enabled = v
@@ -1742,14 +1796,14 @@ do
     end)
 end
 
--- AIMBOT
+-- AIMBOT card
 do
     local card = makeCard(combatPage, 4, "AIMBOT",
-        "жёсткий мгновенный лок на голову в радиусе FOV. движение мыши отпускает цель на 0.25с.",
-        nil, 180)
+        "жёсткий лок на голову в радиусе FOV. движение камеры отпускает на 0.12с.", 180)
 
     makeSwitch(card, 46, function(v)
         Aimbot.Enabled = v
+        if not v then Aimbot.MoveAccum = 0 end
         logScript("Aimbot " .. (v and "ON" or "OFF"))
     end)
 
@@ -1847,30 +1901,30 @@ new("UIListLayout", {
 }).Parent = newPage
 
 do
-    local card = makeCard(newPage, 1, "ОБНОВЛЕНИЕ v7.4",
-        "t.me//meredioshub — все апдейты и сборки там.", nil, 300)
+    local card = makeCard(newPage, 1, "ОБНОВЛЕНИЕ v7.5",
+        "t.me//meredioshub — все апдейты и сборки там.", 320)
 
     local body = new("TextLabel", {
         BackgroundTransparency = 1,
         Position = UDim2.new(0, 18, 0, 52),
-        Size = UDim2.new(1, -36, 0, 240),
+        Size = UDim2.new(1, -36, 0, 260),
         Text = table.concat({
-            "• ESP — розовый по дефолту",
-            "• ESP — палитра из 8 цветов",
-            "• ESP — VISIBILITY check (green)",
-            "• green = игрок виден из-за стены",
-            "• Occluded — рисует только силуэт",
-            "• green появляется в палитре",
-            "  когда VISIBILITY выключен",
-            "• WALLBANG — remote sniffer (DIAG)",
-            "• DUMP + RESET WINDOW кнопки",
-            "• Логи расширены до 400 строк",
+            "• Aimbot — hard-lock через приоритет",
+            "  камеры (BindToRenderStep после",
+            "  Camera-модуля). Не отводится сам.",
+            "• Release — только по РЕАЛЬНОМУ",
+            "  вводу (мышь/тач), порог 45px",
+            "• Release-окно сокращено до 0.12с",
+            "• Roll-фикс — камера не заваливается",
+            "• mBtn — градиент сине-розовый",
+            "  с бесконечным переливом",
+            "• mBtn — pulse-glow синхронный",
+            "• mBtn — двойной тап + подсказка",
+            "  «2 times to open»",
+            "• ESL visibility — только BasePart",
+            "• Логи перекрашиваются с темой",
+            "• Исправлено 8 багов (см. коммит)",
             "• Telegram: t.me//meredioshub",
-            "",
-            "v7.5 (soon):",
-            "• Wallbang через RemoteEvent",
-            "• Triggerbot",
-            "• Кастомный RGB-пикер",
         }, "\n"),
         TextColor3 = P.Text,
         Font = Enum.Font.Gotham, TextSize = 10,
@@ -1883,7 +1937,7 @@ do
 end
 
 do
-    local card = makeCard(newPage, 2, "TELEGRAM", "t.me//meredioshub", nil, 84)
+    local card = makeCard(newPage, 2, "TELEGRAM", "t.me//meredioshub", 84)
     local btn = new("TextButton", {
         Position = UDim2.new(0, 12, 0, 46),
         Size = UDim2.new(1, -24, 0, 28),
@@ -2014,7 +2068,7 @@ local row3 = sRow(128, "ANIMATIONS")
 segControl(row3, { "ON", "OFF" }, "ON", function(v) Theme.anim = (v == "ON") end)
 
 --=============================================================
--- M BUTTON
+-- M BUTTON v7.5 — gradient + double-tap + pulse-glow
 --=============================================================
 local mBtn = new("TextButton", {
     Size = UDim2.new(0, 52, 0, 52),
@@ -2025,10 +2079,39 @@ local mBtn = new("TextButton", {
     AutoButtonColor = false, BorderSizePixel = 0, Visible = false,
 })
 round(mBtn, 26)
-gradientStroke(mBtn, 1, 0.02, 30)
 mBtn.Parent = ScreenGui
-reg(mBtn, "BackgroundColor3", "BgGlass"); reg(mBtn, "TextColor3", "Text")
+reg(mBtn, "BackgroundColor3", "BgGlass")
+reg(mBtn, "TextColor3", "Text")
 
+-- сине-розовый градиент на обводке кнопки
+local mBtnStroke = new("UIStroke", {
+    Thickness = 1.5,
+    Transparency = 0.05,
+    ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+    LineJoinMode = Enum.LineJoinMode.Round,
+    Color = Color3.new(1, 1, 1),
+})
+mBtnStroke.Parent = mBtn
+local mBtnGrad = new("UIGradient", {
+    Color = BluePinkSeq,
+    Rotation = 30,
+})
+mBtnGrad.Parent = mBtnStroke
+
+task.spawn(function()
+    while mBtn.Parent do
+        local startRot = mBtnGrad.Rotation
+        local tw = TS:Create(mBtnGrad,
+            TweenInfo.new(3.2, Enum.EasingStyle.Linear, Enum.EasingDirection.InOut),
+            { Rotation = startRot + 360 })
+        tw:Play()
+        tw.Completed:Wait()
+        if not mBtn.Parent then break end
+        mBtnGrad.Rotation = startRot
+    end
+end)
+
+-- внешний glow
 local mGlow = new("Frame", {
     AnchorPoint = Vector2.new(0.5, 0.5),
     Position = UDim2.new(0.5, 0, 0.5, 0),
@@ -2036,11 +2119,81 @@ local mGlow = new("Frame", {
     BackgroundTransparency = 1, ZIndex = mBtn.ZIndex - 1,
 })
 round(mGlow, 30)
-gradientStroke(mGlow, 2, 0.75, 30)
+local mGlowStroke = new("UIStroke", {
+    Thickness = 2,
+    Transparency = 0.75,
+    ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+    LineJoinMode = Enum.LineJoinMode.Round,
+    Color = Color3.new(1, 1, 1),
+})
+mGlowStroke.Parent = mGlow
+local mGlowGrad = new("UIGradient", {
+    Color = BluePinkSeq,
+    Rotation = 30,
+})
+mGlowGrad.Parent = mGlowStroke
 mGlow.Parent = mBtn
 
+task.spawn(function()
+    while mGlow.Parent do
+        tween(mGlowStroke, 1.4, { Transparency = 0.55 }, Enum.EasingStyle.Sine)
+        task.wait(1.4)
+        if not mGlow.Parent then break end
+        tween(mGlowStroke, 1.4, { Transparency = 0.85 }, Enum.EasingStyle.Sine)
+        task.wait(1.4)
+    end
+end)
+
+-- подсказка
+local tapHint = new("TextLabel", {
+    AnchorPoint = Vector2.new(0.5, 0),
+    Position = UDim2.new(0.5, 0, 1, 8),
+    Size = UDim2.new(0, 150, 0, 26),
+    BackgroundColor3 = P.BgGlass, BackgroundTransparency = 1,
+    Text = "2 times to open",
+    TextColor3 = P.Text,
+    Font = Enum.Font.GothamBold, TextSize = 11,
+    BorderSizePixel = 0,
+    TextTransparency = 1,
+    Visible = false,
+    ZIndex = 60,
+})
+round(tapHint, 9)
+local tapHintStroke = new("UIStroke", {
+    Thickness = 1, Transparency = 1,
+    ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+    Color = Color3.new(1, 1, 1),
+})
+tapHintStroke.Parent = tapHint
+new("UIGradient", { Color = BluePinkSeq, Rotation = 30 }).Parent = tapHintStroke
+tapHint.Parent = mBtn
+reg(tapHint, "BackgroundColor3", "BgGlass")
+reg(tapHint, "TextColor3", "Text")
+
+local function showTapHint()
+    tapHint.Visible = true
+    tapHint.TextTransparency = 1
+    tapHint.BackgroundTransparency = 1
+    tapHintStroke.Transparency = 1
+    tween(tapHint, 0.15, { TextTransparency = 0, BackgroundTransparency = 0.1 }, Enum.EasingStyle.Quint)
+    tween(tapHintStroke, 0.15, { Transparency = 0.3 }, Enum.EasingStyle.Quint)
+end
+
+local function hideTapHint()
+    tween(tapHint, 0.20, { TextTransparency = 1, BackgroundTransparency = 1 }, Enum.EasingStyle.Quint)
+    tween(tapHintStroke, 0.20, { Transparency = 1 }, Enum.EasingStyle.Quint)
+    task.delay(0.20, function()
+        if tapHint.TextTransparency > 0.99 then tapHint.Visible = false end
+    end)
+end
+
+-- drag + double-tap
 do
     local dragging, dragStart, startAbs, moved = false, nil, nil, false
+    local tapCount = 0
+    local lastTapTime = 0
+    local TAP_WINDOW = 1.5
+
     mBtn.InputBegan:Connect(function(input)
         local t = input.UserInputType
         if t == Enum.UserInputType.MouseButton1 or t == Enum.UserInputType.Touch then
@@ -2049,12 +2202,14 @@ do
             startAbs = mBtn.AbsolutePosition
         end
     end)
+
     UIS.InputChanged:Connect(function(input)
         if not dragging then return end
         local t = input.UserInputType
         if t == Enum.UserInputType.MouseMovement or t == Enum.UserInputType.Touch then
             local d = input.Position - dragStart
             if math.abs(d.X) > 4 or math.abs(d.Y) > 4 then moved = true end
+            if not moved then return end
             local cam = workspace.CurrentCamera
             if not cam then return end
             local vp = cam.ViewportSize
@@ -2063,12 +2218,38 @@ do
             mBtn.Position = UDim2.new(0, newX, 0, newY)
         end
     end)
+
+    local function handleTap()
+        local now = tick()
+        if now - lastTapTime > TAP_WINDOW then
+            tapCount = 0
+        end
+        tapCount = tapCount + 1
+        lastTapTime = now
+
+        if tapCount >= 2 then
+            tapCount = 0
+            hideTapHint()
+            if _G.MerediosMorph then _G.MerediosMorph() end
+            return
+        end
+
+        showTapHint()
+        local myStamp = now
+        task.delay(TAP_WINDOW, function()
+            if lastTapTime == myStamp and tapCount == 1 then
+                tapCount = 0
+                hideTapHint()
+            end
+        end)
+    end
+
     UIS.InputEnded:Connect(function(input)
         if not dragging then return end
         local t = input.UserInputType
         if t == Enum.UserInputType.MouseButton1 or t == Enum.UserInputType.Touch then
             dragging = false
-            if not moved and _G.MerediosMorph then _G.MerediosMorph() end
+            if not moved then handleTap() end
         end
     end)
 end
@@ -2116,6 +2297,8 @@ function _G.MerediosMorph()
     if not started or morphing or menu.Visible then return end
     morphing = true
 
+    if tapHint.Visible then hideTapHint() end
+
     local originalSize = mBtn.Size
     local originalPos  = mBtn.Position
     local originalText = mBtn.Text
@@ -2128,13 +2311,17 @@ function _G.MerediosMorph()
         local t0 = tick()
         while tick() - t0 < 0.55 and mBtn.Parent do
             local phase = (tick() - t0) / 0.55
-            mBtn.TextColor3 = GradientColors:Evaluate(phase % 1)
+            mBtn.TextColor3 = BluePinkSeq:Evaluate(phase % 1)
             task.wait(0.03)
         end
     end)
 
     task.wait(0.55)
+
+    -- синхронное затухание всего
     tween(mBtn, 0.28, { BackgroundTransparency = 1, TextTransparency = 1 })
+    tween(mBtnStroke, 0.28, { Transparency = 1 })
+    tween(mGlowStroke, 0.28, { Transparency = 1 })
     task.wait(0.28)
 
     mBtn.Visible = false
@@ -2145,6 +2332,8 @@ function _G.MerediosMorph()
     mBtn.Size = originalSize
     mBtn.Position = originalPos
     mBtn.TextColor3 = P.Text
+    mBtnStroke.Transparency = 0.05
+    mGlowStroke.Transparency = 0.75
 
     morphing = false
     openMenu()
@@ -2195,7 +2384,7 @@ startBtn.MouseButton1Click:Connect(function()
     task.delay(0.4, function()
         startup.Visible = false
         openMenu()
-        logScript("Meredios HUD v7.4 started · t.me//meredioshub")
+        logScript("Meredios HUD v7.5 started · t.me//meredioshub")
     end)
 end)
 
@@ -2217,10 +2406,10 @@ startup.Visible = true
 startup.GroupTransparency = 1
 startupStroke.Transparency = 1
 
-logScript("Kernel loaded · v7.4")
+logScript("Kernel loaded · v7.5")
 logScript("t.me//meredioshub")
-logScript("ESP pink default · visibility green")
-logScript("Aimbot hard-lock · FOV=" .. Aimbot.FOV .. "px")
+logScript("Aimbot hard-lock · camera priority · FOV=" .. Aimbot.FOV)
+logScript("mBtn · gradient + double-tap")
 renderLog()
 
 return true
