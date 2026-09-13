@@ -1,5 +1,5 @@
 --[[
-    MEREDIOS v7.7.3 — оперативный контур
+    MEREDIOS v7.7.4 — оперативный контур
     Roblox / Delta X Mobile
     t.me//meredioshub
 ]]
@@ -153,6 +153,14 @@ local function dragify(frame, handle, canDrag)
     end)
 end
 
+-- FIX 1: Logger объявлен ДО applyTheme, чтобы applyTheme захватил его как upvalue
+local Logger = {
+    buffer = { server = {}, script = {} },
+    maxLen = 400,
+    listeners = {},
+    activeTab = "script",
+}
+
 local ThemeReg = {}
 local function reg(inst, prop, key)
     table.insert(ThemeReg, {inst, prop, key})
@@ -189,15 +197,8 @@ end
 print("[M2] theme OK")
 
 --=============================================================
--- LOGGER + CLIPBOARD
+-- LOGGER FUNCTIONS + CLIPBOARD
 --=============================================================
-local Logger = {
-    buffer = { server = {}, script = {} },
-    maxLen = 400,
-    listeners = {},
-    activeTab = "script",
-}
-
 local function logLine(channel, text)
     local buf = Logger.buffer[channel]
     if not buf then return end
@@ -669,12 +670,6 @@ local fovStroke = new("UIStroke", {
     LineJoinMode = Enum.LineJoinMode.Round,
 })
 fovStroke.Parent = fovCircle
-local fovDarkStroke = new("UIStroke", {
-    Thickness = 1.5, Color = Color3.fromRGB(0,0,0), Transparency = 1,
-    ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
-    LineJoinMode = Enum.LineJoinMode.Round,
-})
-fovDarkStroke.Parent = fovCircle
 local fovGlow = new("Frame", {
     AnchorPoint = Vector2.new(0.5, 0.5),
     Position = UDim2.new(0.5, 0, 0.5, 0),
@@ -691,10 +686,6 @@ fovGlowStroke.Parent = fovGlow
 fovGlow.Parent = fovCircle
 fovCircle.Parent = ScreenGui
 
-local function isLightColor(c)
-    return (0.299 * c.R + 0.587 * c.G + 0.114 * c.B) > 0.75
-end
-
 local function updateFOVCircle()
     fovCircle.Size = UDim2.new(0, Aimbot.FOV * 2, 0, Aimbot.FOV * 2)
     local corner = fovCircle:FindFirstChildOfClass("UICorner")
@@ -704,7 +695,6 @@ local function updateFOVCircle()
     if gc then gc.CornerRadius = UDim.new(0, Aimbot.FOV - 3) end
     fovStroke.Color = Aimbot.Color
     fovGlowStroke.Color = Aimbot.Color
-    fovDarkStroke.Transparency = isLightColor(Aimbot.Color) and 0.15 or 1
 end
 
 local function getHeadPos(plr)
@@ -862,16 +852,25 @@ end)
 Players.PlayerRemoving:Connect(function(plr)
     logServer(plr.Name .. " left")
     hookedPlayers[plr] = nil
-    for part, _ in pairs(HitboxChanger.Original) do
+    -- FIX 3: собрать список частей ДО очистки — pairs + nil запись пропускает итерации
+    local toClear = {}
+    for part in pairs(HitboxChanger.Original) do
         if part and part.Parent and plr.Character
            and part:IsDescendantOf(plr.Character) then
-            pcall(function()
-                local orig = HitboxChanger.Original[part]
-                part.Size = orig.Size; part.Transparency = orig.Transparency
-                part.CanCollide = orig.CanCollide; part.CanQuery = orig.CanQuery
-            end)
-            HitboxChanger.Original[part] = nil
+            table.insert(toClear, part)
         end
+    end
+    for _, part in ipairs(toClear) do
+        local orig = HitboxChanger.Original[part]
+        if orig then
+            pcall(function()
+                part.Size = orig.Size
+                part.Transparency = orig.Transparency
+                part.CanCollide = orig.CanCollide
+                part.CanQuery = orig.CanQuery
+            end)
+        end
+        HitboxChanger.Original[part] = nil
     end
     if ESP.Highlights[plr] then
         pcall(function() ESP.Highlights[plr]:Destroy() end)
@@ -942,7 +941,7 @@ local startupSub = new("TextLabel", {
     BackgroundTransparency = 1,
     Position = UDim2.new(0, 22, 0, 48),
     Size = UDim2.new(1, -44, 0, 12),
-    Text = "// meridian core v7.7.3 · t.me//meredioshub",
+    Text = "// meridian core v7.7.4 · t.me//meredioshub",
     TextColor3 = P.SubText,
     Font = Enum.Font.Code, TextSize = 9,
     TextXAlignment = Enum.TextXAlignment.Left,
@@ -985,7 +984,7 @@ local startPillLbl = new("TextLabel", {
 })
 startPillLbl.Parent = startPill
 
-local startupVisible = true
+-- FIX 5: startupVisible удалена как мёртвая переменная
 
 --=============================================================
 -- MENU
@@ -1049,7 +1048,7 @@ local subBrand = new("TextLabel", {
     BackgroundTransparency = 1,
     Position = UDim2.new(0, 18, 0, 28),
     Size = UDim2.new(0, 320, 0, 12),
-    Text = "v7.7.3 // t.me//meredioshub",
+    Text = "v7.7.4 // t.me//meredioshub",
     TextColor3 = P.SubText,
     Font = Enum.Font.Code, TextSize = 9,
     TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 2,
@@ -1137,7 +1136,6 @@ new("UIListLayout", {
     VerticalAlignment = Enum.VerticalAlignment.Center,
 }).Parent = tabBar
 
--- FIX 1: ClipsDescendants (было ClipDescendants — невалидное свойство)
 local contentBox = new("Frame", {
     Position = UDim2.new(0, 12, 0, 94),
     Size = UDim2.new(1, -24, 1, -106),
@@ -1148,7 +1146,7 @@ contentBox.Parent = menu
 local TABS = { "MAIN", "LOG", "COMBAT", "NEW" }
 local tabButtons = {}
 local contentPages = {}
-local pageScrolls = {}   -- FIX 2: отдельная таблица вместо page._scroll
+local pageScrolls = {}
 local activeTab = "MAIN"
 
 local function switchTab(name)
@@ -1185,6 +1183,13 @@ local function switchTab(name)
                 end
             end)
         end
+    end
+    -- FIX 6: принудительно финализируем активную страницу, перебиваем зависшие твины
+    local cur = contentPages[name]
+    if cur then
+        cur.Position = UDim2.new(0, 0, 0, 0)
+        cur.GroupTransparency = 0
+        cur.Visible = true
     end
 end
 
@@ -1298,11 +1303,11 @@ local function makeCard(parent, order, title, desc, height)
     return card, accentBar
 end
 
+-- FIX 2: y теперь реально работает — тумблер ставится на заданную высоту
 local function makeSwitch(card, y, onChanged, initial)
     local track = new("Frame", {
         Size = UDim2.new(0, 40, 0, 20),
-        Position = UDim2.new(1, -52, 0.5, 0),
-        AnchorPoint = Vector2.new(0, 0.5),
+        Position = UDim2.new(1, -52, 0, y - 10),
         BackgroundColor3 = P.Track, BorderSizePixel = 0, ZIndex = 2,
     })
     round(track, 10); track.Parent = card
@@ -1317,7 +1322,7 @@ local function makeSwitch(card, y, onChanged, initial)
 
     local lbl = new("TextLabel", {
         BackgroundTransparency = 1,
-        Position = UDim2.new(1, -80, 0.5, -6),
+        Position = UDim2.new(1, -80, 0, y - 16),
         Size = UDim2.new(0, 24, 0, 12),
         Text = "OFF", TextColor3 = P.SubText,
         Font = Enum.Font.GothamBold, TextSize = 9,
@@ -1370,7 +1375,7 @@ do
         logScript("Speed value = " .. tostring(Speed.Value))
     end)
 
-    makeSwitch(card, 36, function(v)
+    makeSwitch(card, 48, function(v)
         Speed.Enabled = v
         if not v then
             local hum = LP.Character and LP.Character:FindFirstChildOfClass("Humanoid")
@@ -1382,7 +1387,7 @@ end
 
 do
     local card = makeCard(mainScroll, 2, "ANTI-FLING", "гасит флинг")
-    makeSwitch(card, 40, function(v)
+    makeSwitch(card, 34, function(v)
         AntiFling.Enabled = v
         logScript("Anti-Fling " .. (v and "ON" or "OFF"))
     end)
@@ -1410,7 +1415,7 @@ end
 --=============================================================
 local logScroll = makePage("LOG")
 local logPage = contentPages["LOG"]
-pageScrolls["LOG"].ScrollingEnabled = false   -- FIX 2
+pageScrolls["LOG"].ScrollingEnabled = false
 
 local logViewport = new("Frame", {
     Position = UDim2.new(0, 0, 0, 0),
@@ -1588,7 +1593,7 @@ do
         box.Text = tostring(HitboxChanger.Size)
     end)
 
-    makeSwitch(card, 36, function(v)
+    makeSwitch(card, 48, function(v)
         HitboxChanger.Enabled = v
         if v then applyAllHitboxes() else restoreAllHitboxes() end
         logScript("Hitbox " .. (v and "ON" or "OFF"))
@@ -1648,7 +1653,7 @@ do
     reg(visLbl, "TextColor3", "SubText")
 
     local rebuildESPPalette
-    makeSwitch(card, 52, function(v)
+    makeSwitch(card, 72, function(v)
         ESP.VisibilityCheck = v
         reapplyAllESPStyles()
         if rebuildESPPalette then rebuildESPPalette() end
@@ -1656,7 +1661,7 @@ do
     end, true)
 
     local palRow = new("Frame", {
-        Position = UDim2.new(0, 14, 0, 76),
+        Position = UDim2.new(0, 14, 0, 82),
         Size = UDim2.new(1, -28, 0, 26),
         BackgroundTransparency = 1, ZIndex = 2,
     })
@@ -1744,7 +1749,7 @@ end
 local aimSettingsBtnRef = nil
 do
     local card = makeCard(combatScroll, 4, "AIMBOT", "hard-lock на голову", 66)
-    makeSwitch(card, 36, function(v)
+    makeSwitch(card, 40, function(v)
         Aimbot.Enabled = v
         if not v then Aimbot.MoveAccum = 0 end
         logScript("Aimbot " .. (v and "ON" or "OFF"))
@@ -2108,20 +2113,21 @@ end)
 local newScroll = makePage("NEW")
 
 do
-    local card = makeCard(newScroll, 1, "ОБНОВЛЕНИЕ v7.7.3", "t.me//meredioshub", 300)
+    local card = makeCard(newScroll, 1, "ОБНОВЛЕНИЕ v7.7.4", "t.me//meredioshub", 300)
     local body = new("TextLabel", {
         BackgroundTransparency = 1,
         Position = UDim2.new(0, 18, 0, 44),
         Size = UDim2.new(1, -36, 0, 250),
         Text = table.concat({
-            "• FIX: ClipsDescendants (инжект)",
-            "• FIX: pageScrolls таблица",
-            "• FIX: switchTab(\"MAIN\") на старте",
-            "• START — TextButton целиком",
+            "• FIX: Logger поднят выше applyTheme",
+            "• FIX: makeSwitch использует y",
+            "• FIX: PlayerRemoving через буфер",
+            "• FIX: мёртвый fovDarkStroke удалён",
+            "• FIX: startupVisible удалена",
+            "• FIX: гонка в switchTab погашена",
+            "• ClipsDescendants, pageScrolls, openMenu",
             "• WALLBANG — safe namecall hook",
-            "• AIMBOT — панель настроек",
-            "• AIMBOT — visible-only",
-            "• AIMBOT — FOV слайдер + палитра",
+            "• AIMBOT — visible-only, FOV, палитра",
             "• Telegram: t.me//meredioshub",
         }, "\n"),
         TextColor3 = P.Text,
@@ -2433,7 +2439,6 @@ local started  = false
 local closeToken = 0
 
 local function openMenu()
-    -- FIX 3: активируем MAIN до показа меню, иначе пустая страница
     for tName, page in pairs(contentPages) do
         page.Visible = (tName == activeTab)
         if tName == activeTab then
@@ -2572,7 +2577,6 @@ local function onStartBtn()
     started_lock = true
     started = true
     logScript("START pressed")
-    startupVisible = false
     pcall(function()
         tween(startup, 0.4, { BackgroundTransparency = 1 })
         tween(startupStroke, 0.4, { Transparency = 1 })
@@ -2585,7 +2589,7 @@ local function onStartBtn()
     task.delay(0.4, function()
         startup.Visible = false
         openMenu()
-        logScript("Meredios HUD v7.7.3 started")
+        logScript("Meredios HUD v7.7.4 started")
     end)
 end
 
@@ -2629,7 +2633,7 @@ aimSettings.BackgroundTransparency = 0.02
 aimSettingsStroke.Transparency = 1
 mBtn.Visible = false
 
-logScript("Kernel loaded · v7.7.3")
+logScript("Kernel loaded · v7.7.4")
 logScript("t.me//meredioshub")
 logScript("START: tap anywhere on panel")
 renderLog()
