@@ -1,8 +1,10 @@
 --[[
-    MEREDIOS v7.7.1 — оперативный контур
+    MEREDIOS v7.7.2 — оперативный контур
     Roblox / Delta X Mobile
     t.me//meredioshub
 --]]
+
+print("[M1] top of script")
 
 do
     local targets = {}
@@ -183,6 +185,8 @@ local function applyTheme()
         if s.stroke and s.stroke.Parent then s.stroke.Color = P.CardEdge end
     end
 end
+
+print("[M2] theme OK")
 
 --=============================================================
 -- LOGGER + CLIPBOARD
@@ -575,34 +579,62 @@ task.spawn(function()
     end
 end)
 
+-- БЕЗОПАСНЫЙ namecall hook — весь body в pcall, оригинал всегда выполняется
 do
     local okMT, mt = pcall(function() return getrawmetatable(game) end)
     if okMT and mt and type(newcclosure) == "function" and type(setreadonly) == "function" then
         local oldNamecall = mt.__namecall
         if oldNamecall then
-            pcall(setreadonly, mt, false)
-            mt.__namecall = newcclosure(function(self, ...)
-                local method = getnamecallmethod and getnamecallmethod() or "?"
-                if method == "FireServer" and Wallbang.Enabled
-                   and self == Wallbang.ByteNetRemote then
-                    local args = table.pack(...)
-                    if isShotPacket(args[1]) then
-                        local newBuf = buffer.create(SHOT_PACKET_LEN)
-                        pcall(function() buffer.copy(newBuf, 0, args[1], 0, SHOT_PACKET_LEN) end)
-                        if wallbangPatch(newBuf) then
-                            args[1] = newBuf
-                            return oldNamecall(self, table.unpack(args, 1, args.n))
+            local installed = pcall(function()
+                setreadonly(mt, false)
+                mt.__namecall = newcclosure(function(self, ...)
+                    local ok, result = pcall(function()
+                        local method = "?"
+                        if type(getnamecallmethod) == "function" then
+                            local ok2, m = pcall(getnamecallmethod)
+                            if ok2 and m then method = m end
                         end
+
+                        if method == "FireServer"
+                           and Wallbang.Enabled
+                           and Wallbang.ByteNetRemote
+                           and self == Wallbang.ByteNetRemote then
+                            local args = table.pack(...)
+                            if isShotPacket(args[1]) then
+                                local newBuf = buffer.create(SHOT_PACKET_LEN)
+                                pcall(function() buffer.copy(newBuf, 0, args[1], 0, SHOT_PACKET_LEN) end)
+                                if wallbangPatch(newBuf) then
+                                    args[1] = newBuf
+                                    return { patched = true, args = args }
+                                end
+                            end
+                        end
+                        return nil
+                    end)
+
+                    if ok and result and result.patched then
+                        local a = result.args
+                        return oldNamecall(self, table.unpack(a, 1, a.n))
                     end
-                end
-                return oldNamecall(self, ...)
+                    return oldNamecall(self, ...)
+                end)
+                setreadonly(mt, true)
             end)
-            pcall(setreadonly, mt, true)
-            Wallbang.HookArmed = true
-            logScript("WALLBANG hook armed")
+
+            if installed then
+                Wallbang.HookArmed = true
+                logScript("WALLBANG hook armed (safe)")
+            else
+                pcall(function() setreadonly(mt, true) end)
+                logScript("WALLBANG hook install failed — disabled")
+            end
         end
+    else
+        logScript("WALLBANG hook unavailable")
     end
 end
+
+print("[M3] wallbang block OK")
 
 --=============================================================
 -- AIMBOT
@@ -787,6 +819,8 @@ end
 pcall(function() RunService:UnbindFromRenderStep("MerediosAimbot") end)
 RunService:BindToRenderStep("MerediosAimbot", Enum.RenderPriority.Camera.Value + 1, aimbotStep)
 
+print("[M4] aimbot block OK")
+
 --=============================================================
 -- PLAYER HOOKS
 --=============================================================
@@ -857,9 +891,13 @@ if LP then
     end)
 end
 
+print("[M5] player hooks OK")
+
 --=============================================================
--- STARTUP — FRAME + кликается везде
+-- STARTUP — TextButton, вся панель кликается
 --=============================================================
+print("[M5.1] before STARTUP")
+
 local startup = new("TextButton", {
     Name = "MerediosStartup",
     AnchorPoint = Vector2.new(0.5, 0.5),
@@ -885,6 +923,8 @@ new("UIGradient", { Color = GradientColors, Rotation = 30 }).Parent = startupStr
 startup.Parent = ScreenGui
 reg(startup, "BackgroundColor3", "BgGlass")
 
+print("[M6] startup created")
+
 local startupTitle = new("TextLabel", {
     BackgroundTransparency = 1,
     Position = UDim2.new(0, 22, 0, 18),
@@ -892,7 +932,7 @@ local startupTitle = new("TextLabel", {
     Text = "Meredios",
     TextColor3 = P.Text,
     Font = Enum.Font.GothamBold, TextSize = 26,
-    TextXAlignment = Enum.TextXAlignment.Left, TextTransparency = 0,
+    TextXAlignment = Enum.TextXAlignment.Left,
     ZIndex = 11,
 })
 startupTitle.Parent = startup
@@ -902,10 +942,10 @@ local startupSub = new("TextLabel", {
     BackgroundTransparency = 1,
     Position = UDim2.new(0, 22, 0, 48),
     Size = UDim2.new(1, -44, 0, 12),
-    Text = "// meridian core v7.7.1 · t.me//meredioshub",
+    Text = "// meridian core v7.7.2 · t.me//meredioshub",
     TextColor3 = P.SubText,
     Font = Enum.Font.Code, TextSize = 9,
-    TextXAlignment = Enum.TextXAlignment.Left, TextTransparency = 0,
+    TextXAlignment = Enum.TextXAlignment.Left,
     ZIndex = 11,
 })
 startupSub.Parent = startup
@@ -918,7 +958,7 @@ local startupTapLbl = new("TextLabel", {
     Text = "▸ tap anywhere to start",
     TextColor3 = Accent.Main,
     Font = Enum.Font.GothamBold, TextSize = 10,
-    TextXAlignment = Enum.TextXAlignment.Left, TextTransparency = 0,
+    TextXAlignment = Enum.TextXAlignment.Left,
     ZIndex = 11,
 })
 startupTapLbl.Parent = startup
@@ -946,17 +986,6 @@ local startPillLbl = new("TextLabel", {
 startPillLbl.Parent = startPill
 
 local startupVisible = true
-tween(startup, 0.45, { BackgroundTransparency = 0.05 })
-
-task.spawn(function()
-    while startupVisible and startup.Parent do
-        tween(startupStroke, 1.2, { Transparency = 0.02 }, Enum.EasingStyle.Sine)
-        task.wait(1.2)
-        if not startupVisible or not startup.Parent then break end
-        tween(startupStroke, 1.2, { Transparency = 0.20 }, Enum.EasingStyle.Sine)
-        task.wait(1.2)
-    end
-end)
 
 --=============================================================
 -- MENU
@@ -1020,7 +1049,7 @@ local subBrand = new("TextLabel", {
     BackgroundTransparency = 1,
     Position = UDim2.new(0, 18, 0, 28),
     Size = UDim2.new(0, 320, 0, 12),
-    Text = "v7.7.1 // t.me//meredioshub",
+    Text = "v7.7.2 // t.me//meredioshub",
     TextColor3 = P.SubText,
     Font = Enum.Font.Code, TextSize = 9,
     TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 2,
@@ -1830,7 +1859,7 @@ local function setVisibleOnly(v)
     if v then
         ESP.Enabled = true; ESP.VisibilityCheck = true
         refreshAllESP()
-        logScript("AIM visible-only ON → ESP+VIS forced")
+        logScript("AIM visible-only ON")
     else
         logScript("AIM visible-only OFF")
     end
@@ -2077,21 +2106,19 @@ end)
 local newScroll = makePage("NEW")
 
 do
-    local card = makeCard(newScroll, 1, "ОБНОВЛЕНИЕ v7.7.1", "t.me//meredioshub", 300)
+    local card = makeCard(newScroll, 1, "ОБНОВЛЕНИЕ v7.7.2", "t.me//meredioshub", 300)
     local body = new("TextLabel", {
         BackgroundTransparency = 1,
         Position = UDim2.new(0, 18, 0, 44),
         Size = UDim2.new(1, -36, 0, 250),
         Text = table.concat({
-            "• START — теперь TextButton",
-            "  вся панель кликается целиком",
-            "• START — 4 обработчика",
-            "  (MouseButton1Click + Activated",
-            "  + TouchTap + TouchLongPress)",
-            "• START — глобальный fallback:",
-            "  любой тач на экране стартует",
+            "• START — TextButton целиком",
+            "• START — весь body хука в pcall",
+            "• START — оригинал всегда выполняется",
+            "• START — глобальный fallback на UIS",
+            "• WALLBANG hook — safe версия",
+            "  если упал — не трогает namecall",
             "• Aimbot — круг виден постоянно",
-            "• WALLBANG — ByteNet shot patch",
             "• AIMBOT — панель настроек",
             "• AIMBOT — visible-only",
             "• AIMBOT — FOV слайдер + палитра",
@@ -2520,35 +2547,37 @@ sClose.MouseButton1Click:Connect(function()
     end)
 end)
 
--- ФИКС START: сама startup = TextButton, тап в любое место
+--=============================================================
+-- START HANDLER
+--=============================================================
 local started_lock = false
 local function onStartBtn()
     if started_lock then return end
     started_lock = true
     started = true
-    logScript("START button pressed")
+    logScript("START pressed")
     startupVisible = false
-    tween(startup, 0.4, { BackgroundTransparency = 1 })
-    tween(startupStroke, 0.4, { Transparency = 1 })
-    tween(startupTitle, 0.4, { TextTransparency = 1 })
-    tween(startupSub, 0.4, { TextTransparency = 1 })
-    tween(startupTapLbl, 0.4, { TextTransparency = 1 })
-    tween(startPill, 0.4, { BackgroundTransparency = 1 })
-    tween(startPillLbl, 0.4, { TextTransparency = 1 })
+    pcall(function()
+        tween(startup, 0.4, { BackgroundTransparency = 1 })
+        tween(startupStroke, 0.4, { Transparency = 1 })
+        tween(startupTitle, 0.4, { TextTransparency = 1 })
+        tween(startupSub, 0.4, { TextTransparency = 1 })
+        tween(startupTapLbl, 0.4, { TextTransparency = 1 })
+        tween(startPill, 0.4, { BackgroundTransparency = 1 })
+        tween(startPillLbl, 0.4, { TextTransparency = 1 })
+    end)
     task.delay(0.4, function()
         startup.Visible = false
         openMenu()
-        logScript("Meredios HUD started")
+        logScript("Meredios HUD v7.7.2 started")
     end)
 end
 
--- 1) startup сам кликается
 startup.MouseButton1Click:Connect(onStartBtn)
 startup.Activated:Connect(onStartBtn)
 pcall(function() startup.TouchTap:Connect(onStartBtn) end)
 pcall(function() startup.TouchLongPress:Connect(onStartBtn) end)
 
--- 2) startPill тоже кликается (страховка от старого кода)
 startPill.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.Touch
        or input.UserInputType == Enum.UserInputType.MouseButton1 then
@@ -2556,8 +2585,7 @@ startPill.InputBegan:Connect(function(input)
     end
 end)
 
--- 3) глобальный fallback: любой тач на экране пока startup видим
-UIS.InputBegan:Connect(function(input, gpe)
+UIS.InputBegan:Connect(function(input)
     if started_lock then return end
     if not startup or not startup.Visible then return end
     if input.UserInputType == Enum.UserInputType.Touch
@@ -2585,9 +2613,10 @@ aimSettings.BackgroundTransparency = 0.02
 aimSettingsStroke.Transparency = 1
 mBtn.Visible = false
 
-logScript("Kernel loaded · v7.7.1")
+logScript("Kernel loaded · v7.7.2")
 logScript("t.me//meredioshub")
 logScript("START: tap anywhere on panel")
 renderLog()
 
+print("[M7] end of script")
 return true
