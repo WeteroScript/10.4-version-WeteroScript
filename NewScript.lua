@@ -1,5 +1,5 @@
 --[[
-    MEREDIOS v7.7 — оперативный контур
+    MEREDIOS v7.7.1 — оперативный контур
     Roblox / Delta X Mobile
     t.me//meredioshub
 --]]
@@ -745,7 +745,6 @@ local prevTargetLogged = nil
 local function aimbotStep()
     local now = tick()
 
-    -- ФИКС: круг виден всегда пока aim+showCircle включены
     if Aimbot.Enabled and Aimbot.ShowCircle then
         fovCircle.Visible = true
     else
@@ -859,15 +858,21 @@ if LP then
 end
 
 --=============================================================
--- STARTUP
+-- STARTUP — FRAME + кликается везде
 --=============================================================
-local startup = new("CanvasGroup", {
+local startup = new("TextButton", {
+    Name = "MerediosStartup",
     AnchorPoint = Vector2.new(0.5, 0.5),
     Position = UDim2.new(0.5, 0, 0.5, 0),
-    Size = UDim2.new(0, 300, 0, 140),
-    BackgroundColor3 = P.BgGlass, BackgroundTransparency = 0.05,
-    BorderSizePixel = 0, GroupTransparency = 1,
-    Active = false,   -- ФИКС: не перехватывать ввод
+    Size = UDim2.new(0, 300, 0, 160),
+    BackgroundColor3 = P.BgGlass,
+    BackgroundTransparency = 0.05,
+    BorderSizePixel = 0,
+    Text = "",
+    AutoButtonColor = false,
+    Active = true,
+    Selectable = true,
+    ZIndex = 10,
 })
 round(startup, 20)
 local startupStroke = new("UIStroke", {
@@ -877,60 +882,80 @@ local startupStroke = new("UIStroke", {
 })
 startupStroke.Parent = startup
 new("UIGradient", { Color = GradientColors, Rotation = 30 }).Parent = startupStroke
-startupStroke.Transparency = 1
 startup.Parent = ScreenGui
 reg(startup, "BackgroundColor3", "BgGlass")
 
 local startupTitle = new("TextLabel", {
     BackgroundTransparency = 1,
-    Position = UDim2.new(0, -60, 0, 20),
+    Position = UDim2.new(0, 22, 0, 18),
     Size = UDim2.new(1, -44, 0, 30),
     Text = "Meredios",
     TextColor3 = P.Text,
     Font = Enum.Font.GothamBold, TextSize = 26,
-    TextXAlignment = Enum.TextXAlignment.Left, TextTransparency = 1,
-    ZIndex = 5,
+    TextXAlignment = Enum.TextXAlignment.Left, TextTransparency = 0,
+    ZIndex = 11,
 })
 startupTitle.Parent = startup
 reg(startupTitle, "TextColor3", "Text")
 
 local startupSub = new("TextLabel", {
     BackgroundTransparency = 1,
-    Position = UDim2.new(0, -40, 0, 50),
+    Position = UDim2.new(0, 22, 0, 48),
     Size = UDim2.new(1, -44, 0, 12),
-    Text = "// meridian core v7.7 · t.me//meredioshub",
+    Text = "// meridian core v7.7.1 · t.me//meredioshub",
     TextColor3 = P.SubText,
     Font = Enum.Font.Code, TextSize = 9,
-    TextXAlignment = Enum.TextXAlignment.Left, TextTransparency = 1,
-    ZIndex = 5,
+    TextXAlignment = Enum.TextXAlignment.Left, TextTransparency = 0,
+    ZIndex = 11,
 })
 startupSub.Parent = startup
 reg(startupSub, "TextColor3", "SubText")
 
--- ФИКС: START — ZIndex выше, Active, размер больше
-local startBtn = new("TextButton", {
-    Position = UDim2.new(0.5, 0, 1, -58), AnchorPoint = Vector2.new(0.5, 0),
-    Size = UDim2.new(0, 160, 0, 40),
-    BackgroundColor3 = Accent.Main,
-    Text = "НАЧАТЬ", TextColor3 = Color3.fromRGB(255,255,255),
-    Font = Enum.Font.GothamBold, TextSize = 13,
-    AutoButtonColor = false, BorderSizePixel = 0,
-    TextTransparency = 1, BackgroundTransparency = 1,
-    ZIndex = 20, Active = true, Selectable = true,
+local startupTapLbl = new("TextLabel", {
+    BackgroundTransparency = 1,
+    Position = UDim2.new(0, 22, 0, 70),
+    Size = UDim2.new(1, -44, 0, 14),
+    Text = "▸ tap anywhere to start",
+    TextColor3 = Accent.Main,
+    Font = Enum.Font.GothamBold, TextSize = 10,
+    TextXAlignment = Enum.TextXAlignment.Left, TextTransparency = 0,
+    ZIndex = 11,
 })
-round(startBtn, 10)
-startBtn.Parent = startup
+startupTapLbl.Parent = startup
 
-tween(startup, 0.45, { GroupTransparency = 0 })
-tween(startupStroke, 0.45, { Transparency = 0.08 })
+local startPill = new("Frame", {
+    AnchorPoint = Vector2.new(0.5, 0),
+    Position = UDim2.new(0.5, 0, 1, -46),
+    Size = UDim2.new(0, 200, 0, 36),
+    BackgroundColor3 = Accent.Main,
+    BackgroundTransparency = 0.1,
+    BorderSizePixel = 0,
+    ZIndex = 11,
+})
+round(startPill, 10)
+startPill.Parent = startup
+
+local startPillLbl = new("TextLabel", {
+    BackgroundTransparency = 1,
+    Size = UDim2.new(1, 0, 1, 0),
+    Text = "НАЧАТЬ",
+    TextColor3 = Color3.fromRGB(255,255,255),
+    Font = Enum.Font.GothamBold, TextSize = 13,
+    ZIndex = 12,
+})
+startPillLbl.Parent = startPill
+
+local startupVisible = true
+tween(startup, 0.45, { BackgroundTransparency = 0.05 })
 
 task.spawn(function()
-    task.wait(0.7)
-    if not startup.Parent then return end
-    tween(startupTitle, 0.5, { Position = UDim2.new(0, 22, 0, 20), TextTransparency = 0 })
-    tween(startupSub, 0.5, { Position = UDim2.new(0, 22, 0, 50), TextTransparency = 0 })
-    task.wait(0.15)
-    tween(startBtn, 0.42, { TextTransparency = 0, BackgroundTransparency = 0 })
+    while startupVisible and startup.Parent do
+        tween(startupStroke, 1.2, { Transparency = 0.02 }, Enum.EasingStyle.Sine)
+        task.wait(1.2)
+        if not startupVisible or not startup.Parent then break end
+        tween(startupStroke, 1.2, { Transparency = 0.20 }, Enum.EasingStyle.Sine)
+        task.wait(1.2)
+    end
 end)
 
 --=============================================================
@@ -995,7 +1020,7 @@ local subBrand = new("TextLabel", {
     BackgroundTransparency = 1,
     Position = UDim2.new(0, 18, 0, 28),
     Size = UDim2.new(0, 320, 0, 12),
-    Text = "v7.7 // t.me//meredioshub",
+    Text = "v7.7.1 // t.me//meredioshub",
     TextColor3 = P.SubText,
     Font = Enum.Font.Code, TextSize = 9,
     TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 2,
@@ -1750,7 +1775,7 @@ local asClose = new("TextButton", {
 round(asClose, 8); asClose.Parent = aimSettings
 reg(asClose, "BackgroundColor3", "Card"); reg(asClose, "TextColor3", "Text")
 
--- 1. VISIBLE ONLY
+-- VISIBLE ONLY
 local asRow1 = new("Frame", {
     Position = UDim2.new(0, 18, 0, 48),
     Size = UDim2.new(1, -36, 0, 40),
@@ -1816,7 +1841,7 @@ local asVisBtn = new("TextButton", {
 asVisBtn.Parent = asVisTrack
 asVisBtn.MouseButton1Click:Connect(function() setVisibleOnly(not asVisState) end)
 
--- 2. SHOW CIRCLE
+-- SHOW CIRCLE
 local asRow2 = new("Frame", {
     Position = UDim2.new(0, 18, 0, 96),
     Size = UDim2.new(1, -36, 0, 30),
@@ -1864,7 +1889,7 @@ local asCircBtn = new("TextButton", {
 asCircBtn.Parent = asCircTrack
 asCircBtn.MouseButton1Click:Connect(function() setShowCircle(not asCircState) end)
 
--- 3. FOV slider
+-- FOV slider
 local asFovLbl = new("TextLabel", {
     BackgroundTransparency = 1,
     Position = UDim2.new(0, 18, 0, 134),
@@ -1940,7 +1965,7 @@ UIS.InputEnded:Connect(function(input)
     end
 end)
 
--- 4. FOV palette
+-- FOV palette
 local asPalLbl = new("TextLabel", {
     BackgroundTransparency = 1,
     Position = UDim2.new(0, 18, 0, 176),
@@ -2052,24 +2077,24 @@ end)
 local newScroll = makePage("NEW")
 
 do
-    local card = makeCard(newScroll, 1, "ОБНОВЛЕНИЕ v7.7", "t.me//meredioshub", 300)
+    local card = makeCard(newScroll, 1, "ОБНОВЛЕНИЕ v7.7.1", "t.me//meredioshub", 300)
     local body = new("TextLabel", {
         BackgroundTransparency = 1,
         Position = UDim2.new(0, 18, 0, 44),
         Size = UDim2.new(1, -36, 0, 250),
         Text = table.concat({
-            "• START-кнопка — 4 обработчика",
-            "  (Click + Activated + TouchTap)",
-            "• START-кнопка — ZIndex=20, Active",
+            "• START — теперь TextButton",
+            "  вся панель кликается целиком",
+            "• START — 4 обработчика",
+            "  (MouseButton1Click + Activated",
+            "  + TouchTap + TouchLongPress)",
+            "• START — глобальный fallback:",
+            "  любой тач на экране стартует",
             "• Aimbot — круг виден постоянно",
-            "  пока aim+showCircle ON",
             "• WALLBANG — ByteNet shot patch",
             "• AIMBOT — панель настроек",
             "• AIMBOT — visible-only",
             "• AIMBOT — FOV слайдер + палитра",
-            "• AIMBOT — белый с чёрной обводкой",
-            "• GUI — компактные карточки",
-            "• GUI — анимация переключения",
             "• Telegram: t.me//meredioshub",
         }, "\n"),
         TextColor3 = P.Text,
@@ -2495,15 +2520,21 @@ sClose.MouseButton1Click:Connect(function()
     end)
 end)
 
--- ФИКС: START-кнопка — 4 обработчика + lock
+-- ФИКС START: сама startup = TextButton, тап в любое место
 local started_lock = false
 local function onStartBtn()
     if started_lock then return end
     started_lock = true
     started = true
     logScript("START button pressed")
-    tween(startup, 0.4, { GroupTransparency = 1 })
+    startupVisible = false
+    tween(startup, 0.4, { BackgroundTransparency = 1 })
     tween(startupStroke, 0.4, { Transparency = 1 })
+    tween(startupTitle, 0.4, { TextTransparency = 1 })
+    tween(startupSub, 0.4, { TextTransparency = 1 })
+    tween(startupTapLbl, 0.4, { TextTransparency = 1 })
+    tween(startPill, 0.4, { BackgroundTransparency = 1 })
+    tween(startPillLbl, 0.4, { TextTransparency = 1 })
     task.delay(0.4, function()
         startup.Visible = false
         openMenu()
@@ -2511,10 +2542,29 @@ local function onStartBtn()
     end)
 end
 
-startBtn.MouseButton1Click:Connect(onStartBtn)
-startBtn.Activated:Connect(onStartBtn)
-pcall(function() startBtn.TouchTap:Connect(onStartBtn) end)
-pcall(function() startBtn.TouchLongPress:Connect(onStartBtn) end)
+-- 1) startup сам кликается
+startup.MouseButton1Click:Connect(onStartBtn)
+startup.Activated:Connect(onStartBtn)
+pcall(function() startup.TouchTap:Connect(onStartBtn) end)
+pcall(function() startup.TouchLongPress:Connect(onStartBtn) end)
+
+-- 2) startPill тоже кликается (страховка от старого кода)
+startPill.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.Touch
+       or input.UserInputType == Enum.UserInputType.MouseButton1 then
+        onStartBtn()
+    end
+end)
+
+-- 3) глобальный fallback: любой тач на экране пока startup видим
+UIS.InputBegan:Connect(function(input, gpe)
+    if started_lock then return end
+    if not startup or not startup.Visible then return end
+    if input.UserInputType == Enum.UserInputType.Touch
+       or input.UserInputType == Enum.UserInputType.MouseButton1 then
+        onStartBtn()
+    end
+end)
 
 for _, e in ipairs(ThemeReg) do
     local inst, prop, key = e[1], e[2], e[3]
@@ -2534,13 +2584,10 @@ aimSettings.GroupTransparency = 1
 aimSettings.BackgroundTransparency = 0.02
 aimSettingsStroke.Transparency = 1
 mBtn.Visible = false
-startup.Visible = true
-startup.GroupTransparency = 1
-startupStroke.Transparency = 1
 
-logScript("Kernel loaded · v7.7")
+logScript("Kernel loaded · v7.7.1")
 logScript("t.me//meredioshub")
-logScript("Wallbang ByteNet · Aimbot hard-lock")
+logScript("START: tap anywhere on panel")
 renderLog()
 
 return true
