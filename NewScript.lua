@@ -1,8 +1,8 @@
 --[[
-    MEREDIOS v7.7.2 — оперативный контур
+    MEREDIOS v7.7.3 — оперативный контур
     Roblox / Delta X Mobile
     t.me//meredioshub
---]]
+]]
 
 print("[M1] top of script")
 
@@ -942,7 +942,7 @@ local startupSub = new("TextLabel", {
     BackgroundTransparency = 1,
     Position = UDim2.new(0, 22, 0, 48),
     Size = UDim2.new(1, -44, 0, 12),
-    Text = "// meridian core v7.7.2 · t.me//meredioshub",
+    Text = "// meridian core v7.7.3 · t.me//meredioshub",
     TextColor3 = P.SubText,
     Font = Enum.Font.Code, TextSize = 9,
     TextXAlignment = Enum.TextXAlignment.Left,
@@ -1049,7 +1049,7 @@ local subBrand = new("TextLabel", {
     BackgroundTransparency = 1,
     Position = UDim2.new(0, 18, 0, 28),
     Size = UDim2.new(0, 320, 0, 12),
-    Text = "v7.7.2 // t.me//meredioshub",
+    Text = "v7.7.3 // t.me//meredioshub",
     TextColor3 = P.SubText,
     Font = Enum.Font.Code, TextSize = 9,
     TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 2,
@@ -1137,16 +1137,18 @@ new("UIListLayout", {
     VerticalAlignment = Enum.VerticalAlignment.Center,
 }).Parent = tabBar
 
+-- FIX 1: ClipsDescendants (было ClipDescendants — невалидное свойство)
 local contentBox = new("Frame", {
     Position = UDim2.new(0, 12, 0, 94),
     Size = UDim2.new(1, -24, 1, -106),
-    BackgroundTransparency = 1, ZIndex = 2, ClipDescendants = true,
+    BackgroundTransparency = 1, ZIndex = 2, ClipsDescendants = true,
 })
 contentBox.Parent = menu
 
 local TABS = { "MAIN", "LOG", "COMBAT", "NEW" }
 local tabButtons = {}
 local contentPages = {}
+local pageScrolls = {}   -- FIX 2: отдельная таблица вместо page._scroll
 local activeTab = "MAIN"
 
 local function switchTab(name)
@@ -1215,7 +1217,7 @@ local function makePage(name)
     }).Parent = scroll
 
     contentPages[name] = page
-    page._scroll = scroll
+    pageScrolls[name] = scroll
     return scroll
 end
 
@@ -1408,7 +1410,7 @@ end
 --=============================================================
 local logScroll = makePage("LOG")
 local logPage = contentPages["LOG"]
-logPage._scroll.ScrollingEnabled = false
+pageScrolls["LOG"].ScrollingEnabled = false   -- FIX 2
 
 local logViewport = new("Frame", {
     Position = UDim2.new(0, 0, 0, 0),
@@ -2106,19 +2108,17 @@ end)
 local newScroll = makePage("NEW")
 
 do
-    local card = makeCard(newScroll, 1, "ОБНОВЛЕНИЕ v7.7.2", "t.me//meredioshub", 300)
+    local card = makeCard(newScroll, 1, "ОБНОВЛЕНИЕ v7.7.3", "t.me//meredioshub", 300)
     local body = new("TextLabel", {
         BackgroundTransparency = 1,
         Position = UDim2.new(0, 18, 0, 44),
         Size = UDim2.new(1, -36, 0, 250),
         Text = table.concat({
+            "• FIX: ClipsDescendants (инжект)",
+            "• FIX: pageScrolls таблица",
+            "• FIX: switchTab(\"MAIN\") на старте",
             "• START — TextButton целиком",
-            "• START — весь body хука в pcall",
-            "• START — оригинал всегда выполняется",
-            "• START — глобальный fallback на UIS",
-            "• WALLBANG hook — safe версия",
-            "  если упал — не трогает namecall",
-            "• Aimbot — круг виден постоянно",
+            "• WALLBANG — safe namecall hook",
             "• AIMBOT — панель настроек",
             "• AIMBOT — visible-only",
             "• AIMBOT — FOV слайдер + палитра",
@@ -2433,6 +2433,22 @@ local started  = false
 local closeToken = 0
 
 local function openMenu()
+    -- FIX 3: активируем MAIN до показа меню, иначе пустая страница
+    for tName, page in pairs(contentPages) do
+        page.Visible = (tName == activeTab)
+        if tName == activeTab then
+            page.Position = UDim2.new(0, 0, 0, 0)
+            page.GroupTransparency = 0
+        end
+    end
+    for tName, btn in pairs(tabButtons) do
+        local on = (tName == activeTab)
+        btn.BackgroundTransparency = on and 0.05 or 0.85
+        btn.TextColor3 = on and Color3.fromRGB(255,255,255) or P.SubText
+        local st = btn:FindFirstChildOfClass("UIStroke")
+        if st then st.Transparency = on and 0 or 0.5 end
+    end
+
     menu.Visible = true
     menu.GroupTransparency = 1
     menu.BackgroundTransparency = 0.04
@@ -2569,7 +2585,7 @@ local function onStartBtn()
     task.delay(0.4, function()
         startup.Visible = false
         openMenu()
-        logScript("Meredios HUD v7.7.2 started")
+        logScript("Meredios HUD v7.7.3 started")
     end)
 end
 
@@ -2613,7 +2629,7 @@ aimSettings.BackgroundTransparency = 0.02
 aimSettingsStroke.Transparency = 1
 mBtn.Visible = false
 
-logScript("Kernel loaded · v7.7.2")
+logScript("Kernel loaded · v7.7.3")
 logScript("t.me//meredioshub")
 logScript("START: tap anywhere on panel")
 renderLog()
