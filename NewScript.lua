@@ -1,5 +1,7 @@
+local __MAIN = function()
+
 --[[
-    MEREDIOS v7.7.4 — оперативный контур
+    MEREDIOS v7.7.5 — оперативный контур
     Roblox / Delta X Mobile
     t.me//meredioshub
 ]]
@@ -153,7 +155,6 @@ local function dragify(frame, handle, canDrag)
     end)
 end
 
--- FIX 1: Logger объявлен ДО applyTheme, чтобы applyTheme захватил его как upvalue
 local Logger = {
     buffer = { server = {}, script = {} },
     maxLen = 400,
@@ -202,7 +203,8 @@ print("[M2] theme OK")
 local function logLine(channel, text)
     local buf = Logger.buffer[channel]
     if not buf then return end
-    local t = os.date("%H:%M:%S")
+    local ok, t = pcall(function() return os.date("%H:%M:%S") end)
+    if not ok or not t then t = "??:??:??" end
     table.insert(buf, "[" .. t .. "] " .. text)
     while #buf > Logger.maxLen do table.remove(buf, 1) end
     for _, cb in ipairs(Logger.listeners) do pcall(cb, channel) end
@@ -580,7 +582,6 @@ task.spawn(function()
     end
 end)
 
--- БЕЗОПАСНЫЙ namecall hook — весь body в pcall, оригинал всегда выполняется
 do
     local okMT, mt = pcall(function() return getrawmetatable(game) end)
     if okMT and mt and type(newcclosure) == "function" and type(setreadonly) == "function" then
@@ -852,7 +853,6 @@ end)
 Players.PlayerRemoving:Connect(function(plr)
     logServer(plr.Name .. " left")
     hookedPlayers[plr] = nil
-    -- FIX 3: собрать список частей ДО очистки — pairs + nil запись пропускает итерации
     local toClear = {}
     for part in pairs(HitboxChanger.Original) do
         if part and part.Parent and plr.Character
@@ -893,7 +893,7 @@ end
 print("[M5] player hooks OK")
 
 --=============================================================
--- STARTUP — TextButton, вся панель кликается
+-- STARTUP
 --=============================================================
 print("[M5.1] before STARTUP")
 
@@ -941,7 +941,7 @@ local startupSub = new("TextLabel", {
     BackgroundTransparency = 1,
     Position = UDim2.new(0, 22, 0, 48),
     Size = UDim2.new(1, -44, 0, 12),
-    Text = "// meridian core v7.7.4 · t.me//meredioshub",
+    Text = "// meridian core v7.7.5 · t.me//meredioshub",
     TextColor3 = P.SubText,
     Font = Enum.Font.Code, TextSize = 9,
     TextXAlignment = Enum.TextXAlignment.Left,
@@ -983,8 +983,6 @@ local startPillLbl = new("TextLabel", {
     ZIndex = 12,
 })
 startPillLbl.Parent = startPill
-
--- FIX 5: startupVisible удалена как мёртвая переменная
 
 --=============================================================
 -- MENU
@@ -1048,7 +1046,7 @@ local subBrand = new("TextLabel", {
     BackgroundTransparency = 1,
     Position = UDim2.new(0, 18, 0, 28),
     Size = UDim2.new(0, 320, 0, 12),
-    Text = "v7.7.4 // t.me//meredioshub",
+    Text = "v7.7.5 // t.me//meredioshub",
     TextColor3 = P.SubText,
     Font = Enum.Font.Code, TextSize = 9,
     TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 2,
@@ -1184,7 +1182,6 @@ local function switchTab(name)
             end)
         end
     end
-    -- FIX 6: принудительно финализируем активную страницу, перебиваем зависшие твины
     local cur = contentPages[name]
     if cur then
         cur.Position = UDim2.new(0, 0, 0, 0)
@@ -1303,7 +1300,6 @@ local function makeCard(parent, order, title, desc, height)
     return card, accentBar
 end
 
--- FIX 2: y теперь реально работает — тумблер ставится на заданную высоту
 local function makeSwitch(card, y, onChanged, initial)
     local track = new("Frame", {
         Size = UDim2.new(0, 40, 0, 20),
@@ -1569,7 +1565,6 @@ end)
 --=============================================================
 local combatScroll = makePage("COMBAT")
 
--- HITBOX
 do
     local card = makeCard(combatScroll, 1, "HITBOX CHANGER", "размер 1–50", 66)
     local box = new("TextBox", {
@@ -1632,7 +1627,6 @@ do
     viewBtn.MouseButton1Click:Connect(function() setView(not viewState) end)
 end
 
--- ESP
 do
     local card = makeCard(combatScroll, 2, "ESP", "зелёный = виден из-за стены", 110)
     makeSwitch(card, 40, function(v)
@@ -1711,7 +1705,6 @@ do
     task.defer(rebuildESPPalette)
 end
 
--- WALLBANG
 do
     local card = makeCard(combatScroll, 3, "WALLBANG", "ByteNet shot patch", 100)
     makeSwitch(card, 40, function(v)
@@ -1745,7 +1738,6 @@ do
     end)
 end
 
--- AIMBOT
 local aimSettingsBtnRef = nil
 do
     local card = makeCard(combatScroll, 4, "AIMBOT", "hard-lock на голову", 66)
@@ -1811,7 +1803,6 @@ local asClose = new("TextButton", {
 round(asClose, 8); asClose.Parent = aimSettings
 reg(asClose, "BackgroundColor3", "Card"); reg(asClose, "TextColor3", "Text")
 
--- VISIBLE ONLY
 local asRow1 = new("Frame", {
     Position = UDim2.new(0, 18, 0, 48),
     Size = UDim2.new(1, -36, 0, 40),
@@ -1877,7 +1868,6 @@ local asVisBtn = new("TextButton", {
 asVisBtn.Parent = asVisTrack
 asVisBtn.MouseButton1Click:Connect(function() setVisibleOnly(not asVisState) end)
 
--- SHOW CIRCLE
 local asRow2 = new("Frame", {
     Position = UDim2.new(0, 18, 0, 96),
     Size = UDim2.new(1, -36, 0, 30),
@@ -1925,7 +1915,6 @@ local asCircBtn = new("TextButton", {
 asCircBtn.Parent = asCircTrack
 asCircBtn.MouseButton1Click:Connect(function() setShowCircle(not asCircState) end)
 
--- FOV slider
 local asFovLbl = new("TextLabel", {
     BackgroundTransparency = 1,
     Position = UDim2.new(0, 18, 0, 134),
@@ -2001,7 +1990,6 @@ UIS.InputEnded:Connect(function(input)
     end
 end)
 
--- FOV palette
 local asPalLbl = new("TextLabel", {
     BackgroundTransparency = 1,
     Position = UDim2.new(0, 18, 0, 176),
@@ -2113,19 +2101,19 @@ end)
 local newScroll = makePage("NEW")
 
 do
-    local card = makeCard(newScroll, 1, "ОБНОВЛЕНИЕ v7.7.4", "t.me//meredioshub", 300)
+    local card = makeCard(newScroll, 1, "ОБНОВЛЕНИЕ v7.7.5", "t.me//meredioshub", 300)
     local body = new("TextLabel", {
         BackgroundTransparency = 1,
         Position = UDim2.new(0, 18, 0, 44),
         Size = UDim2.new(1, -36, 0, 250),
         Text = table.concat({
-            "• FIX: Logger поднят выше applyTheme",
-            "• FIX: makeSwitch использует y",
+            "• FIX: весь скрипт в __MAIN + pcall",
+            "• FIX: return true убран из глобала",
+            "• FIX: диагностика ошибки на экран",
+            "• FIX: os.date в pcall",
+            "• FIX: Logger выше applyTheme",
+            "• FIX: makeSwitch y работает",
             "• FIX: PlayerRemoving через буфер",
-            "• FIX: мёртвый fovDarkStroke удалён",
-            "• FIX: startupVisible удалена",
-            "• FIX: гонка в switchTab погашена",
-            "• ClipsDescendants, pageScrolls, openMenu",
             "• WALLBANG — safe namecall hook",
             "• AIMBOT — visible-only, FOV, палитра",
             "• Telegram: t.me//meredioshub",
@@ -2589,7 +2577,7 @@ local function onStartBtn()
     task.delay(0.4, function()
         startup.Visible = false
         openMenu()
-        logScript("Meredios HUD v7.7.4 started")
+        logScript("Meredios HUD v7.7.5 started")
     end)
 end
 
@@ -2633,10 +2621,41 @@ aimSettings.BackgroundTransparency = 0.02
 aimSettingsStroke.Transparency = 1
 mBtn.Visible = false
 
-logScript("Kernel loaded · v7.7.4")
+logScript("Kernel loaded · v7.7.5")
 logScript("t.me//meredioshub")
 logScript("START: tap anywhere on panel")
 renderLog()
 
 print("[M7] end of script")
-return true
+
+end  -- __MAIN
+
+local __ok, __err = pcall(__MAIN)
+if not __ok then
+    warn("[MEREDIOS ERROR] " .. tostring(__err))
+    local sg = Instance.new("ScreenGui")
+    sg.Name = "MerediosErr"
+    sg.DisplayOrder = 100000
+    pcall(function() sg.Parent = game:GetService("CoreGui") end)
+    if not sg.Parent then
+        pcall(function() sg.Parent = game:GetService("Players").LocalPlayer:WaitForChild("PlayerGui", 3) end)
+    end
+    if sg.Parent then
+        local box = Instance.new("TextLabel")
+        box.Size = UDim2.new(0, 520, 0, 240)
+        box.Position = UDim2.new(0, 20, 0, 20)
+        box.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+        box.BackgroundTransparency = 0.1
+        box.TextColor3 = Color3.fromRGB(255, 90, 90)
+        box.Text = "MEREDIOS ERROR:\n\n" .. tostring(__err)
+        box.TextWrapped = true
+        box.TextXAlignment = Enum.TextXAlignment.Left
+        box.TextYAlignment = Enum.TextYAlignment.Top
+        box.Font = Enum.Font.Code
+        box.TextSize = 13
+        box.Parent = sg
+        local c = Instance.new("UICorner")
+        c.CornerRadius = UDim.new(0, 10)
+        c.Parent = box
+    end
+end
