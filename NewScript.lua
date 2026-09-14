@@ -1,67 +1,8 @@
--- [COMPAT] task library fallback for older exploit environments
-if not task then
-    local _t = {}
-    _t.wait  = function(n) return wait(n or 0) end
-    _t.spawn = function(f, ...) local a = {...}; return spawn(function() f(table.unpack(a)) end) end
-    _t.delay = function(d, f) return delay(d, f) end
-    _t.defer = function(f) return spawn(f) end
-    task = _t
-end
-
-local __MAIN = function()
-
--- [COMPAT] CanvasGroup fallback
-local _CANVAS_OK = pcall(function()
-    local _tmp = Instance.new("CanvasGroup"); _tmp:Destroy()
-end)
-local function _newCanvas(props)
-    local inst = Instance.new(_CANVAS_OK and "CanvasGroup" or "Frame")
-    if props then
-        for k, v in pairs(props) do
-            if _CANVAS_OK or k ~= "GroupTransparency" then
-                pcall(function() inst[k] = v end)
-            end
-        end
-    end
-    return inst
-end
-local function _setGT(obj, v)
-    if _CANVAS_OK then
-        pcall(function() _setGT(obj, v end))
-    else
-        pcall(function() obj.Visible = (v < 0.99) end)
-    end
-end
-local function _tweenGT(obj, t, props, style, dir)
-    if _CANVAS_OK then
-        return tween(obj, t, props, style, dir)
-    else
-        local safe = {}
-        for k, v in pairs(props) do
-            if k == "GroupTransparency" then
-                -- convert to visibility change after tween time
-                local _v = v
-                task.delay(t, function()
-                    if obj and obj.Parent then
-                        pcall(function() obj.Visible = (_v < 0.99) end)
-                    end
-                end)
-            else
-                safe[k] = v
-            end
-        end
-        if next(safe) then return tween(obj, t, safe, style, dir) end
-    end
-end
-
-
 --[[
-    MEREDIOS v7.7.5 — оперативный контур
+    MEREDIOS v7.6 — оперативный контур
     Roblox / Delta X Mobile
     t.me//meredioshub
-]]
-
-print("[M1] top of script")
+--]]
 
 do
     local targets = {}
@@ -111,33 +52,7 @@ do
         end
     end
     if not parented then
-        -- попытка 1: FindFirstChild (не ждём)
-        local _pg = LP:FindFirstChildOfClass("PlayerGui")
-        -- попытка 2: WaitForChild с коротким таймаутом
-        if not _pg then
-            local _ok2, _r2 = pcall(function() return LP:WaitForChild("PlayerGui", 8) end)
-            if _ok2 and _r2 then _pg = _r2 end
-        end
-        -- попытка 3: прямой доступ
-        if not _pg then pcall(function() _pg = LP.PlayerGui end) end
-        if _pg then
-            local _ok3 = pcall(function() ScreenGui.Parent = _pg end)
-            parented = _ok3 and ScreenGui.Parent ~= nil
-        end
-    end
-    -- попытка 4: отложенный retry если всё выше провалилось
-    if not parented then
-        task.spawn(function()
-            for _i = 1, 30 do
-                task.wait(0.5)
-                local _pg2 = LP:FindFirstChildOfClass("PlayerGui")
-                if _pg2 then
-                    if pcall(function() ScreenGui.Parent = _pg2 end) and ScreenGui.Parent then
-                        break
-                    end
-                end
-            end
-        end)
+        ScreenGui.Parent = LP:WaitForChild("PlayerGui", 10) or LP.PlayerGui
     end
 end
 
@@ -236,13 +151,6 @@ local function dragify(frame, handle, canDrag)
     end)
 end
 
-local Logger = {
-    buffer = { server = {}, script = {} },
-    maxLen = 400,
-    listeners = {},
-    activeTab = "script",
-}
-
 local ThemeReg = {}
 local function reg(inst, prop, key)
     table.insert(ThemeReg, {inst, prop, key})
@@ -251,7 +159,6 @@ end
 
 local SwitchRegistry = {}
 local LogTabButtons = {}
-local CardStrokes = {}
 
 local function applyTheme()
     refreshPalettes()
@@ -271,21 +178,28 @@ local function applyTheme()
         entry.btn.BackgroundColor3 = active and Accent.Main or P.Card
         entry.btn.TextColor3 = active and Color3.fromRGB(255,255,255) or P.SubText
     end
+    -- перекрасить обводки карточек
     for _, s in ipairs(CardStrokes) do
-        if s.stroke and s.stroke.Parent then s.stroke.Color = P.CardEdge end
+        if s.stroke and s.stroke.Parent then
+            s.stroke.Color = P.CardEdge
+        end
     end
 end
 
-print("[M2] theme OK")
+--=============================================================
+-- LOGGER + CLIPBOARD
+--=============================================================
+local Logger = {
+    buffer = { server = {}, script = {} },
+    maxLen = 400,
+    listeners = {},
+    activeTab = "script",
+}
 
---=============================================================
--- LOGGER FUNCTIONS + CLIPBOARD
---=============================================================
 local function logLine(channel, text)
     local buf = Logger.buffer[channel]
     if not buf then return end
-    local ok, t = pcall(function() return os.date("%H:%M:%S") end)
-    if not ok or not t then t = "??:??:??" end
+    local t = os.date("%H:%M:%S")
     table.insert(buf, "[" .. t .. "] " .. text)
     while #buf > Logger.maxLen do table.remove(buf, 1) end
     for _, cb in ipairs(Logger.listeners) do pcall(cb, channel) end
@@ -316,7 +230,7 @@ local function buildLogText()
 end
 
 --=============================================================
--- HITBOX
+-- HITBOX CHANGER
 --=============================================================
 local HitboxChanger = { Enabled = false, View = false, Size = 12, Original = {} }
 
@@ -351,8 +265,10 @@ local function restoreHitboxForChar(char)
     for part, orig in pairs(HitboxChanger.Original) do
         if part and part.Parent and part:IsDescendantOf(char) then
             pcall(function()
-                part.Size = orig.Size; part.Transparency = orig.Transparency
-                part.CanCollide = orig.CanCollide; part.CanQuery = orig.CanQuery
+                part.Size = orig.Size
+                part.Transparency = orig.Transparency
+                part.CanCollide = orig.CanCollide
+                part.CanQuery = orig.CanQuery
             end)
             HitboxChanger.Original[part] = nil
         end
@@ -407,10 +323,13 @@ end
 
 local function refreshAllHitboxViews()
     for _, plr in ipairs(Players:GetPlayers()) do
-        if plr ~= LP and plr.Character then
-            for _, part in ipairs(hitboxParts(plr.Character)) do
-                local v = part:FindFirstChild("MerediosHitboxView")
-                if v then v.Size = part.Size end
+        if plr ~= LP then
+            local char = plr.Character
+            if char then
+                for _, part in ipairs(hitboxParts(char)) do
+                    local v = part:FindFirstChild("MerediosHitboxView")
+                    if v then v.Size = part.Size end
+                end
             end
         end
     end
@@ -474,12 +393,16 @@ end
 local function applyHighlightStyle(h, plr)
     local visible = ESP.VisibilityCheck and hasLineOfSight(plr.Character)
     if visible then
-        h.FillColor = VISIBLE_COLOR; h.OutlineColor = VISIBLE_COLOR
-        h.FillTransparency = 0.55; h.OutlineTransparency = 0
+        h.FillColor = VISIBLE_COLOR
+        h.OutlineColor = VISIBLE_COLOR
+        h.FillTransparency = 0.55
+        h.OutlineTransparency = 0
         h.DepthMode = Enum.HighlightDepthMode.Occluded
     else
-        h.FillColor = ESP.Color; h.OutlineColor = ESP.Color
-        h.FillTransparency = 0.75; h.OutlineTransparency = 0
+        h.FillColor = ESP.Color
+        h.OutlineColor = ESP.Color
+        h.FillTransparency = 0.75
+        h.OutlineTransparency = 0
         h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
     end
 end
@@ -584,11 +507,15 @@ RunService.Heartbeat:Connect(function()
 end)
 
 --=============================================================
--- WALLBANG
+-- WALLBANG — ByteNet shot patch
 --=============================================================
 local Wallbang = {
-    Enabled = false, ByteNetRemote = nil, Patches = 0,
-    LastError = "", LastEnemy = "", HookArmed = false,
+    Enabled = false,
+    ByteNetRemote = nil,
+    Patches = 0,
+    LastError = "",
+    LastEnemy = "",
+    HookArmed = false,
 }
 
 local OFF_PLAYER_POS  = 2
@@ -668,59 +595,32 @@ do
     if okMT and mt and type(newcclosure) == "function" and type(setreadonly) == "function" then
         local oldNamecall = mt.__namecall
         if oldNamecall then
-            local installed = pcall(function()
-                setreadonly(mt, false)
-                mt.__namecall = newcclosure(function(self, ...)
-                    local ok, result = pcall(function()
-                        local method = "?"
-                        if type(getnamecallmethod) == "function" then
-                            local ok2, m = pcall(getnamecallmethod)
-                            if ok2 and m then method = m end
+            pcall(setreadonly, mt, false)
+            mt.__namecall = newcclosure(function(self, ...)
+                local method = getnamecallmethod and getnamecallmethod() or "?"
+                if method == "FireServer" and Wallbang.Enabled
+                   and self == Wallbang.ByteNetRemote then
+                    local args = table.pack(...)
+                    if isShotPacket(args[1]) then
+                        local newBuf = buffer.create(SHOT_PACKET_LEN)
+                        pcall(function() buffer.copy(newBuf, 0, args[1], 0, SHOT_PACKET_LEN) end)
+                        if wallbangPatch(newBuf) then
+                            args[1] = newBuf
+                            return oldNamecall(self, table.unpack(args, 1, args.n))
                         end
-
-                        if method == "FireServer"
-                           and Wallbang.Enabled
-                           and Wallbang.ByteNetRemote
-                           and self == Wallbang.ByteNetRemote then
-                            local args = table.pack(...)
-                            if isShotPacket(args[1]) then
-                                local newBuf = buffer.create(SHOT_PACKET_LEN)
-                                pcall(function() buffer.copy(newBuf, 0, args[1], 0, SHOT_PACKET_LEN) end)
-                                if wallbangPatch(newBuf) then
-                                    args[1] = newBuf
-                                    return { patched = true, args = args }
-                                end
-                            end
-                        end
-                        return nil
-                    end)
-
-                    if ok and result and result.patched then
-                        local a = result.args
-                        return oldNamecall(self, table.unpack(a, 1, a.n))
                     end
-                    return oldNamecall(self, ...)
-                end)
-                setreadonly(mt, true)
+                end
+                return oldNamecall(self, ...)
             end)
-
-            if installed then
-                Wallbang.HookArmed = true
-                logScript("WALLBANG hook armed (safe)")
-            else
-                pcall(function() setreadonly(mt, true) end)
-                logScript("WALLBANG hook install failed — disabled")
-            end
+            pcall(setreadonly, mt, true)
+            Wallbang.HookArmed = true
+            logScript("WALLBANG hook armed")
         end
-    else
-        logScript("WALLBANG hook unavailable")
     end
 end
 
-print("[M3] wallbang block OK")
-
 --=============================================================
--- AIMBOT
+-- AIMBOT v7.6
 --=============================================================
 local Aimbot = {
     Enabled = false,
@@ -737,13 +637,16 @@ local Aimbot = {
     ActiveGameTouch = nil,
 }
 
+-- FOV circle
 local fovCircle = new("Frame", {
     Name = "MerediosFOVCircle",
     AnchorPoint = Vector2.new(0.5, 0.5),
     Position = UDim2.new(0.5, 0, 0.5, 0),
     Size = UDim2.new(0, Aimbot.FOV * 2, 0, Aimbot.FOV * 2),
-    BackgroundTransparency = 1, BorderSizePixel = 0,
-    Visible = false, ZIndex = 5000,
+    BackgroundTransparency = 1,
+    BorderSizePixel = 0,
+    Visible = false,
+    ZIndex = 5000,
 })
 round(fovCircle, Aimbot.FOV)
 local fovStroke = new("UIStroke", {
@@ -752,6 +655,15 @@ local fovStroke = new("UIStroke", {
     LineJoinMode = Enum.LineJoinMode.Round,
 })
 fovStroke.Parent = fovCircle
+
+-- тёмный контур для белого/светлого цвета
+local fovDarkStroke = new("UIStroke", {
+    Thickness = 1.5, Color = Color3.fromRGB(0,0,0), Transparency = 1,
+    ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+    LineJoinMode = Enum.LineJoinMode.Round,
+})
+fovDarkStroke.Parent = fovCircle
+
 local fovGlow = new("Frame", {
     AnchorPoint = Vector2.new(0.5, 0.5),
     Position = UDim2.new(0.5, 0, 0.5, 0),
@@ -768,6 +680,11 @@ fovGlowStroke.Parent = fovGlow
 fovGlow.Parent = fovCircle
 fovCircle.Parent = ScreenGui
 
+local function isLightColor(c)
+    local lum = 0.299 * c.R + 0.587 * c.G + 0.114 * c.B
+    return lum > 0.75
+end
+
 local function updateFOVCircle()
     fovCircle.Size = UDim2.new(0, Aimbot.FOV * 2, 0, Aimbot.FOV * 2)
     local corner = fovCircle:FindFirstChildOfClass("UICorner")
@@ -777,6 +694,12 @@ local function updateFOVCircle()
     if gc then gc.CornerRadius = UDim.new(0, Aimbot.FOV - 3) end
     fovStroke.Color = Aimbot.Color
     fovGlowStroke.Color = Aimbot.Color
+    -- тёмная обводка для светлых цветов
+    if isLightColor(Aimbot.Color) then
+        fovDarkStroke.Transparency = 0.15
+    else
+        fovDarkStroke.Transparency = 1
+    end
 end
 
 local function getHeadPos(plr)
@@ -797,8 +720,11 @@ local function findNearestTarget()
         if plr ~= LP then
             local pos = getHeadPos(plr)
             if pos then
-                if Aimbot.VisibleOnly and not hasLineOfSight(plr.Character) then
-                    pos = nil
+                -- visible-only фильтр
+                if Aimbot.VisibleOnly then
+                    if not hasLineOfSight(plr.Character) then
+                        pos = nil
+                    end
                 end
                 if pos then
                     local screenPos, onScreen = cam:WorldToViewportPoint(pos)
@@ -849,7 +775,7 @@ local prevTargetLogged = nil
 local function aimbotStep()
     local now = tick()
 
-    if Aimbot.Enabled and Aimbot.ShowCircle then
+    if Aimbot.Enabled and Aimbot.ShowCircle and now < Aimbot.AdjustUntil then
         fovCircle.Visible = true
     else
         fovCircle.Visible = false
@@ -870,8 +796,10 @@ local function aimbotStep()
     end
 
     if now < Aimbot.LockReleaseUntil then
+        if Aimbot.Target and prevTargetLogged then
+            prevTargetLogged = nil
+        end
         Aimbot.Target = nil
-        prevTargetLogged = nil
         return
     end
 
@@ -889,14 +817,7 @@ local function aimbotStep()
 end
 
 pcall(function() RunService:UnbindFromRenderStep("MerediosAimbot") end)
-local __bindOk = pcall(function()
-    RunService:BindToRenderStep("MerediosAimbot", Enum.RenderPriority.Camera.Value + 1, aimbotStep)
-end)
-if not __bindOk then
-    RunService.Heartbeat:Connect(aimbotStep)
-end
-
-print("[M4] aimbot block OK")
+RunService:BindToRenderStep("MerediosAimbot", Enum.RenderPriority.Camera.Value + 1, aimbotStep)
 
 --=============================================================
 -- PLAYER HOOKS
@@ -939,24 +860,16 @@ end)
 Players.PlayerRemoving:Connect(function(plr)
     logServer(plr.Name .. " left")
     hookedPlayers[plr] = nil
-    local toClear = {}
-    for part in pairs(HitboxChanger.Original) do
+    for part, _ in pairs(HitboxChanger.Original) do
         if part and part.Parent and plr.Character
            and part:IsDescendantOf(plr.Character) then
-            table.insert(toClear, part)
-        end
-    end
-    for _, part in ipairs(toClear) do
-        local orig = HitboxChanger.Original[part]
-        if orig then
             pcall(function()
-                part.Size = orig.Size
-                part.Transparency = orig.Transparency
-                part.CanCollide = orig.CanCollide
-                part.CanQuery = orig.CanQuery
+                local orig = HitboxChanger.Original[part]
+                part.Size = orig.Size; part.Transparency = orig.Transparency
+                part.CanCollide = orig.CanCollide; part.CanQuery = orig.CanQuery
             end)
+            HitboxChanger.Original[part] = nil
         end
-        HitboxChanger.Original[part] = nil
     end
     if ESP.Highlights[plr] then
         pcall(function() ESP.Highlights[plr]:Destroy() end)
@@ -976,26 +889,15 @@ if LP then
     end)
 end
 
-print("[M5] player hooks OK")
-
 --=============================================================
 -- STARTUP
 --=============================================================
-print("[M5.1] before STARTUP")
-
-local startup = new("TextButton", {
-    Name = "MerediosStartup",
+local startup = new("CanvasGroup", {
     AnchorPoint = Vector2.new(0.5, 0.5),
     Position = UDim2.new(0.5, 0, 0.5, 0),
-    Size = UDim2.new(0, 300, 0, 160),
-    BackgroundColor3 = P.BgGlass,
-    BackgroundTransparency = 0.05,
-    BorderSizePixel = 0,
-    Text = "",
-    AutoButtonColor = false,
-    Active = true,
-    Selectable = true,
-    ZIndex = 10,
+    Size = UDim2.new(0, 300, 0, 140),
+    BackgroundColor3 = P.BgGlass, BackgroundTransparency = 0.05,
+    BorderSizePixel = 0, GroupTransparency = 1,
 })
 round(startup, 20)
 local startupStroke = new("UIStroke", {
@@ -1005,77 +907,65 @@ local startupStroke = new("UIStroke", {
 })
 startupStroke.Parent = startup
 new("UIGradient", { Color = GradientColors, Rotation = 30 }).Parent = startupStroke
+startupStroke.Transparency = 1
 startup.Parent = ScreenGui
 reg(startup, "BackgroundColor3", "BgGlass")
 
-print("[M6] startup created")
-
 local startupTitle = new("TextLabel", {
     BackgroundTransparency = 1,
-    Position = UDim2.new(0, 22, 0, 18),
+    Position = UDim2.new(0, -60, 0, 20),
     Size = UDim2.new(1, -44, 0, 30),
     Text = "Meredios",
     TextColor3 = P.Text,
     Font = Enum.Font.GothamBold, TextSize = 26,
-    TextXAlignment = Enum.TextXAlignment.Left,
-    ZIndex = 11,
+    TextXAlignment = Enum.TextXAlignment.Left, TextTransparency = 1,
 })
 startupTitle.Parent = startup
 reg(startupTitle, "TextColor3", "Text")
 
 local startupSub = new("TextLabel", {
     BackgroundTransparency = 1,
-    Position = UDim2.new(0, 22, 0, 48),
+    Position = UDim2.new(0, -40, 0, 50),
     Size = UDim2.new(1, -44, 0, 12),
-    Text = "// meridian core v7.7.5 · t.me//meredioshub",
+    Text = "// meridian core v7.6 · t.me//meredioshub",
     TextColor3 = P.SubText,
     Font = Enum.Font.Code, TextSize = 9,
-    TextXAlignment = Enum.TextXAlignment.Left,
-    ZIndex = 11,
+    TextXAlignment = Enum.TextXAlignment.Left, TextTransparency = 1,
 })
 startupSub.Parent = startup
 reg(startupSub, "TextColor3", "SubText")
 
-local startupTapLbl = new("TextLabel", {
-    BackgroundTransparency = 1,
-    Position = UDim2.new(0, 22, 0, 70),
-    Size = UDim2.new(1, -44, 0, 14),
-    Text = "▸ tap anywhere to start",
-    TextColor3 = Accent.Main,
-    Font = Enum.Font.GothamBold, TextSize = 10,
-    TextXAlignment = Enum.TextXAlignment.Left,
-    ZIndex = 11,
-})
-startupTapLbl.Parent = startup
-
-local startPill = new("Frame", {
-    AnchorPoint = Vector2.new(0.5, 0),
-    Position = UDim2.new(0.5, 0, 1, -46),
-    Size = UDim2.new(0, 200, 0, 36),
+local startBtn = new("TextButton", {
+    Position = UDim2.new(0.5, 0, 1, -58), AnchorPoint = Vector2.new(0.5, 0),
+    Size = UDim2.new(0, 160, 0, 36),
     BackgroundColor3 = Accent.Main,
-    BackgroundTransparency = 0.1,
-    BorderSizePixel = 0,
-    ZIndex = 11,
-})
-round(startPill, 10)
-startPill.Parent = startup
-
-local startPillLbl = new("TextLabel", {
-    BackgroundTransparency = 1,
-    Size = UDim2.new(1, 0, 1, 0),
-    Text = "НАЧАТЬ",
-    TextColor3 = Color3.fromRGB(255,255,255),
+    Text = "НАЧАТЬ", TextColor3 = Color3.fromRGB(255,255,255),
     Font = Enum.Font.GothamBold, TextSize = 13,
-    ZIndex = 12,
+    AutoButtonColor = false, BorderSizePixel = 0,
+    TextTransparency = 1, BackgroundTransparency = 1,
 })
-startPillLbl.Parent = startPill
+round(startBtn, 10)
+startBtn.Parent = startup
+
+tween(startup, 0.45, { GroupTransparency = 0 })
+tween(startupStroke, 0.45, { Transparency = 0.08 })
+
+task.spawn(function()
+    task.wait(0.7)
+    if not startup.Parent then return end
+    tween(startupTitle, 0.5, { Position = UDim2.new(0, 22, 0, 20), TextTransparency = 0 })
+    tween(startupSub, 0.5, { Position = UDim2.new(0, 22, 0, 50), TextTransparency = 0 })
+    task.wait(0.15)
+    tween(startBtn, 0.42, { TextTransparency = 0, BackgroundTransparency = 0 })
+end)
 
 --=============================================================
 -- MENU
 --=============================================================
 local MENU_W, MENU_H = 420, 400
+local CardStrokes = {}
 
-local menu = _newCanvas({
+local menu = new("CanvasGroup", {
     AnchorPoint = Vector2.new(0.5, 0.5),
     Position = UDim2.new(0.5, 0, 0.5, 0),
     Size = UDim2.new(0, MENU_W, 0, MENU_H),
@@ -1094,11 +984,13 @@ menuStroke.Transparency = 1
 menu.Parent = ScreenGui
 reg(menu, "BackgroundColor3", "BgGlass")
 
+-- top glow
 local topGlow = new("Frame", {
     Position = UDim2.new(0, 0, 0, 0),
     Size = UDim2.new(1, 0, 0, 56),
     BackgroundColor3 = P.Card,
-    BackgroundTransparency = 0.7, BorderSizePixel = 0, ZIndex = 1,
+    BackgroundTransparency = 0.7,
+    BorderSizePixel = 0, ZIndex = 1,
 })
 round(topGlow, 20)
 topGlow.Parent = menu
@@ -1121,7 +1013,8 @@ local brand = new("TextLabel", {
     BackgroundTransparency = 1,
     Position = UDim2.new(0, 18, 0, 10),
     Size = UDim2.new(0, 220, 0, 18),
-    Text = "MEREDIOS", TextColor3 = P.Text,
+    Text = "MEREDIOS",
+    TextColor3 = P.Text,
     Font = Enum.Font.GothamBold, TextSize = 14,
     TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 2,
 })
@@ -1132,7 +1025,7 @@ local subBrand = new("TextLabel", {
     BackgroundTransparency = 1,
     Position = UDim2.new(0, 18, 0, 28),
     Size = UDim2.new(0, 320, 0, 12),
-    Text = "v7.7.5 // t.me//meredioshub",
+    Text = "v7.6 // t.me//meredioshub",
     TextColor3 = P.SubText,
     Font = Enum.Font.Code, TextSize = 9,
     TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 2,
@@ -1204,6 +1097,7 @@ reg(closeBtn, "BackgroundColor3", "Card"); reg(closeBtn, "TextColor3", "Text")
 
 dragify(menu, topBar, function() return not (_G.MerediosSettingsOpen == true) end)
 
+-- tab bar
 local tabBar = new("ScrollingFrame", {
     Position = UDim2.new(0, 12, 0, 58),
     Size = UDim2.new(1, -24, 0, 30),
@@ -1223,14 +1117,13 @@ new("UIListLayout", {
 local contentBox = new("Frame", {
     Position = UDim2.new(0, 12, 0, 94),
     Size = UDim2.new(1, -24, 1, -106),
-    BackgroundTransparency = 1, ZIndex = 2, ClipsDescendants = true,
+    BackgroundTransparency = 1, ZIndex = 2, ClipDescendants = true,
 })
 contentBox.Parent = menu
 
 local TABS = { "MAIN", "LOG", "COMBAT", "NEW" }
 local tabButtons = {}
 local contentPages = {}
-local pageScrolls = {}
 local activeTab = "MAIN"
 
 local function switchTab(name)
@@ -1245,11 +1138,12 @@ local function switchTab(name)
         local st = btn:FindFirstChildOfClass("UIStroke")
         if st then st.Transparency = on and 0 or 0.5 end
     end
+    -- анимация: старая съезжает влево, новая приходит справа
     for tName, page in pairs(contentPages) do
         if tName == name then
             page.Visible = true
             page.Position = UDim2.new(0.12, 0, 0, 0)
-            _setGT(page, 0.6)
+            page.GroupTransparency = 0.6
             tween(page, 0.32, {
                 Position = UDim2.new(0, 0, 0, 0),
                 GroupTransparency = 0,
@@ -1268,19 +1162,14 @@ local function switchTab(name)
             end)
         end
     end
-    local cur = contentPages[name]
-    if cur then
-        cur.Position = UDim2.new(0, 0, 0, 0)
-        _setGT(cur, 0)
-        cur.Visible = true
-    end
 end
 
 local function makePage(name)
-    local page = _newCanvas({
+    local page = new("CanvasGroup", {
         Size = UDim2.new(1, 0, 1, 0),
         Position = UDim2.new(0, 0, 0, 0),
-        BackgroundTransparency = 1, GroupTransparency = 0,
+        BackgroundTransparency = 1,
+        GroupTransparency = 0,
         Visible = false, ZIndex = 2,
     })
     page.Parent = contentBox
@@ -1305,7 +1194,7 @@ local function makePage(name)
     }).Parent = scroll
 
     contentPages[name] = page
-    pageScrolls[name] = scroll
+    page._scroll = scroll
     return scroll
 end
 
@@ -1315,7 +1204,8 @@ local function makeTab(name, order)
         BackgroundColor3 = Accent.Main, BackgroundTransparency = 0.85,
         Text = name, TextColor3 = P.SubText,
         Font = Enum.Font.GothamBold, TextSize = 10,
-        AutoButtonColor = false, BorderSizePixel = 0, LayoutOrder = order,
+        AutoButtonColor = false, BorderSizePixel = 0,
+        LayoutOrder = order,
     })
     round(btn, 8)
     local st = new("UIStroke", {
@@ -1333,14 +1223,19 @@ end
 
 for i, name in ipairs(TABS) do makeTab(name, i) end
 
+--=============================================================
+-- KOMPAKT-CARD: [title] [switch]
+--=============================================================
 local function makeCard(parent, order, title, desc, height)
     height = height or 60
     local card = new("Frame", {
         Size = UDim2.new(1, 0, 0, height),
         BackgroundColor3 = P.Card, BackgroundTransparency = 0.06,
-        BorderSizePixel = 0, LayoutOrder = order, ZIndex = 10,
+        BorderSizePixel = 0, LayoutOrder = order,
+        ZIndex = 10,
     })
     round(card, 12)
+    -- обводка поверх — ZIndex выше детей
     local stroke = new("UIStroke", {
         Thickness = 1, Transparency = 0.1,
         ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
@@ -1389,7 +1284,8 @@ end
 local function makeSwitch(card, y, onChanged, initial)
     local track = new("Frame", {
         Size = UDim2.new(0, 40, 0, 20),
-        Position = UDim2.new(1, -52, 0, y - 10),
+        Position = UDim2.new(1, -52, 0.5, 0),
+        AnchorPoint = Vector2.new(0, 0.5),
         BackgroundColor3 = P.Track, BorderSizePixel = 0, ZIndex = 2,
     })
     round(track, 10); track.Parent = card
@@ -1404,7 +1300,7 @@ local function makeSwitch(card, y, onChanged, initial)
 
     local lbl = new("TextLabel", {
         BackgroundTransparency = 1,
-        Position = UDim2.new(1, -80, 0, y - 16),
+        Position = UDim2.new(1, -80, 0.5, -6),
         Size = UDim2.new(0, 24, 0, 12),
         Text = "OFF", TextColor3 = P.SubText,
         Font = Enum.Font.GothamBold, TextSize = 9,
@@ -1432,6 +1328,80 @@ local function makeSwitch(card, y, onChanged, initial)
     return set
 end
 
+local function makeSlider(card, y, min, max, initial, onChange)
+    local track = new("Frame", {
+        Position = UDim2.new(0, 12, 0, y),
+        Size = UDim2.new(1, -90, 0, 5),
+        BackgroundColor3 = P.Track,
+        BorderSizePixel = 0, ZIndex = 2,
+    })
+    round(track, 3); track.Parent = card
+
+    local fill = new("Frame", {
+        Size = UDim2.new((initial - min) / (max - min), 0, 1, 0),
+        BackgroundColor3 = Accent.Main,
+        BorderSizePixel = 0, ZIndex = 3,
+    })
+    round(fill, 3); fill.Parent = track
+
+    local knob = new("Frame", {
+        AnchorPoint = Vector2.new(0.5, 0.5),
+        Position = UDim2.new((initial - min) / (max - min), 0, 0.5, 0),
+        Size = UDim2.new(0, 14, 0, 14),
+        BackgroundColor3 = P.Knob, BorderSizePixel = 0, ZIndex = 4,
+    })
+    round(knob, 7); knob.Parent = track
+
+    local valLbl = new("TextLabel", {
+        BackgroundTransparency = 1,
+        Position = UDim2.new(1, -74, 0, y - 9),
+        Size = UDim2.new(0, 62, 0, 14),
+        Text = tostring(initial),
+        TextColor3 = P.Text, Font = Enum.Font.Code, TextSize = 10,
+        TextXAlignment = Enum.TextXAlignment.Right, ZIndex = 2,
+    })
+    valLbl.Parent = card
+    reg(valLbl, "TextColor3", "Text")
+
+    local dragging = false
+    local function setFromX(x)
+        local rel = math.clamp((x - track.AbsolutePosition.X) / math.max(track.AbsoluteSize.X, 1), 0, 1)
+        local v = math.floor(min + (max - min) * rel + 0.5)
+        fill.Size = UDim2.new(rel, 0, 1, 0)
+        knob.Position = UDim2.new(rel, 0, 0.5, 0)
+        valLbl.Text = tostring(v)
+        if onChange then onChange(v) end
+    end
+    track.InputBegan:Connect(function(input)
+        local t = input.UserInputType
+        if t == Enum.UserInputType.MouseButton1 or t == Enum.UserInputType.Touch then
+            dragging = true; setFromX(input.Position.X)
+        end
+    end)
+    UIS.InputChanged:Connect(function(input)
+        if not dragging then return end
+        local t = input.UserInputType
+        if t == Enum.UserInputType.MouseMovement or t == Enum.UserInputType.Touch then
+            setFromX(input.Position.X)
+        end
+    end)
+    UIS.InputEnded:Connect(function(input)
+        if not dragging then return end
+        local t = input.UserInputType
+        if t == Enum.UserInputType.MouseButton1 or t == Enum.UserInputType.Touch then
+            dragging = false
+        end
+    end)
+    return function(v)
+        v = math.clamp(v, min, max)
+        local rel = (v - min) / (max - min)
+        fill.Size = UDim2.new(rel, 0, 1, 0)
+        knob.Position = UDim2.new(rel, 0, 0.5, 0)
+        valLbl.Text = tostring(v)
+        if onChange then onChange(v) end
+    end
+end
+
 --=============================================================
 -- MAIN PAGE
 --=============================================================
@@ -1457,7 +1427,7 @@ do
         logScript("Speed value = " .. tostring(Speed.Value))
     end)
 
-    makeSwitch(card, 48, function(v)
+    makeSwitch(card, 36, function(v)
         Speed.Enabled = v
         if not v then
             local hum = LP.Character and LP.Character:FindFirstChildOfClass("Humanoid")
@@ -1469,7 +1439,7 @@ end
 
 do
     local card = makeCard(mainScroll, 2, "ANTI-FLING", "гасит флинг")
-    makeSwitch(card, 34, function(v)
+    makeSwitch(card, 40, function(v)
         AntiFling.Enabled = v
         logScript("Anti-Fling " .. (v and "ON" or "OFF"))
     end)
@@ -1497,7 +1467,7 @@ end
 --=============================================================
 local logScroll = makePage("LOG")
 local logPage = contentPages["LOG"]
-pageScrolls["LOG"].ScrollingEnabled = false
+logPage._scroll.ScrollingEnabled = false
 
 local logViewport = new("Frame", {
     Position = UDim2.new(0, 0, 0, 0),
@@ -1651,6 +1621,7 @@ end)
 --=============================================================
 local combatScroll = makePage("COMBAT")
 
+-- HITBOX
 do
     local card = makeCard(combatScroll, 1, "HITBOX CHANGER", "размер 1–50", 66)
     local box = new("TextBox", {
@@ -1674,12 +1645,14 @@ do
         box.Text = tostring(HitboxChanger.Size)
     end)
 
-    makeSwitch(card, 48, function(v)
+    makeSwitch(card, 36, function(v)
         HitboxChanger.Enabled = v
-        if v then applyAllHitboxes() else restoreAllHitboxes() end
+        if v then applyAllHitboxes()
+        else restoreAllHitboxes() end
         logScript("Hitbox " .. (v and "ON" or "OFF"))
     end)
 
+    -- VIEW кнопка под input
     local viewBtn = new("TextButton", {
         AnchorPoint = Vector2.new(0.5, 0),
         Position = UDim2.new(0.5, 0, 0, 36),
@@ -1713,8 +1686,10 @@ do
     viewBtn.MouseButton1Click:Connect(function() setView(not viewState) end)
 end
 
+-- ESP
 do
     local card = makeCard(combatScroll, 2, "ESP", "зелёный = виден из-за стены", 110)
+
     makeSwitch(card, 40, function(v)
         ESP.Enabled = v
         refreshAllESP()
@@ -1725,15 +1700,15 @@ do
         BackgroundTransparency = 1,
         Position = UDim2.new(0, 14, 0, 52),
         Size = UDim2.new(1, -100, 0, 14),
-        Text = "VISIBILITY", TextColor3 = P.SubText,
-        Font = Enum.Font.GothamMedium, TextSize = 10,
+        Text = "VISIBILITY",
+        TextColor3 = P.SubText, Font = Enum.Font.GothamMedium, TextSize = 10,
         TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 2,
     })
     visLbl.Parent = card
     reg(visLbl, "TextColor3", "SubText")
 
     local rebuildESPPalette
-    makeSwitch(card, 72, function(v)
+    makeSwitch(card, 52, function(v)
         ESP.VisibilityCheck = v
         reapplyAllESPStyles()
         if rebuildESPPalette then rebuildESPPalette() end
@@ -1741,7 +1716,7 @@ do
     end, true)
 
     local palRow = new("Frame", {
-        Position = UDim2.new(0, 14, 0, 82),
+        Position = UDim2.new(0, 14, 0, 76),
         Size = UDim2.new(1, -28, 0, 26),
         BackgroundTransparency = 1, ZIndex = 2,
     })
@@ -1757,7 +1732,8 @@ do
     rebuildESPPalette = function()
         for _, s in pairs(swatchMap) do pcall(function() s.btn:Destroy() end) end
         swatchMap = {}
-        for i, entry in ipairs(espPaletteCurrent()) do
+        local list = espPaletteCurrent()
+        for i, entry in ipairs(list) do
             local swatch = new("TextButton", {
                 Size = UDim2.new(0, 24, 0, 24),
                 BackgroundColor3 = entry.color, BackgroundTransparency = 0,
@@ -1791,8 +1767,10 @@ do
     task.defer(rebuildESPPalette)
 end
 
+-- WALLBANG
 do
     local card = makeCard(combatScroll, 3, "WALLBANG", "ByteNet shot patch", 100)
+
     makeSwitch(card, 40, function(v)
         Wallbang.Enabled = v
         Wallbang.Patches = 0
@@ -1803,8 +1781,8 @@ do
         BackgroundTransparency = 1,
         Position = UDim2.new(0, 14, 0, 54),
         Size = UDim2.new(1, -28, 0, 34),
-        Text = "", TextColor3 = P.SubText,
-        Font = Enum.Font.Code, TextSize = 9,
+        Text = "",
+        TextColor3 = P.SubText, Font = Enum.Font.Code, TextSize = 9,
         TextXAlignment = Enum.TextXAlignment.Left,
         TextYAlignment = Enum.TextYAlignment.Top,
         TextWrapped = true, ZIndex = 2,
@@ -1824,15 +1802,17 @@ do
     end)
 end
 
-local aimSettingsBtnRef = nil
+-- AIMBOT — кнопка настроек
 do
     local card = makeCard(combatScroll, 4, "AIMBOT", "hard-lock на голову", 66)
-    makeSwitch(card, 40, function(v)
+
+    makeSwitch(card, 36, function(v)
         Aimbot.Enabled = v
         if not v then Aimbot.MoveAccum = 0 end
         logScript("Aimbot " .. (v and "ON" or "OFF"))
     end)
 
+    -- кнопка открытия настроек
     local settingsBtn = new("TextButton", {
         Position = UDim2.new(0, 12, 0, 36),
         Size = UDim2.new(0, 92, 0, 22),
@@ -1842,13 +1822,12 @@ do
         AutoButtonColor = false, BorderSizePixel = 0, ZIndex = 2,
     })
     round(settingsBtn, 6); settingsBtn.Parent = card
-    aimSettingsBtnRef = settingsBtn
 end
 
 --=============================================================
 -- AIMBOT SETTINGS PANEL
 --=============================================================
-local aimSettings = _newCanvas({
+local aimSettings = new("CanvasGroup", {
     AnchorPoint = Vector2.new(0.5, 0.5),
     Position = UDim2.new(0.5, 0, 0.5, 0),
     Size = UDim2.new(0, 320, 0, 300),
@@ -1889,6 +1868,7 @@ local asClose = new("TextButton", {
 round(asClose, 8); asClose.Parent = aimSettings
 reg(asClose, "BackgroundColor3", "Card"); reg(asClose, "TextColor3", "Text")
 
+-- 1. VISIBLE ONLY toggle
 local asRow1 = new("Frame", {
     Position = UDim2.new(0, 18, 0, 48),
     Size = UDim2.new(1, -36, 0, 40),
@@ -1941,9 +1921,11 @@ local function setVisibleOnly(v)
     tween(asVisTrack, 0.24, { BackgroundColor3 = v and Accent.Main or P.Track })
     Aimbot.VisibleOnly = v
     if v then
-        ESP.Enabled = true; ESP.VisibilityCheck = true
+        -- включаем ESP и visibility
+        ESP.Enabled = true
+        ESP.VisibilityCheck = true
         refreshAllESP()
-        logScript("AIM visible-only ON")
+        logScript("AIM visible-only ON → ESP+VIS forced")
     else
         logScript("AIM visible-only OFF")
     end
@@ -1954,6 +1936,7 @@ local asVisBtn = new("TextButton", {
 asVisBtn.Parent = asVisTrack
 asVisBtn.MouseButton1Click:Connect(function() setVisibleOnly(not asVisState) end)
 
+-- 2. SHOW CIRCLE toggle
 local asRow2 = new("Frame", {
     Position = UDim2.new(0, 18, 0, 96),
     Size = UDim2.new(1, -36, 0, 30),
@@ -1962,7 +1945,8 @@ local asRow2 = new("Frame", {
 asRow2.Parent = aimSettings
 
 local asLbl2 = new("TextLabel", {
-    BackgroundTransparency = 1, Size = UDim2.new(1, -60, 1, 0),
+    BackgroundTransparency = 1,
+    Size = UDim2.new(1, -60, 1, 0),
     Text = "SHOW FOV CIRCLE",
     TextColor3 = P.Text, Font = Enum.Font.GothamBold, TextSize = 10,
     TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 9,
@@ -2001,12 +1985,13 @@ local asCircBtn = new("TextButton", {
 asCircBtn.Parent = asCircTrack
 asCircBtn.MouseButton1Click:Connect(function() setShowCircle(not asCircState) end)
 
+-- 3. FOV slider
 local asFovLbl = new("TextLabel", {
     BackgroundTransparency = 1,
     Position = UDim2.new(0, 18, 0, 134),
     Size = UDim2.new(1, -36, 0, 14),
-    Text = "FOV (px)", TextColor3 = P.SubText,
-    Font = Enum.Font.GothamMedium, TextSize = 10,
+    Text = "FOV (px)",
+    TextColor3 = P.SubText, Font = Enum.Font.GothamMedium, TextSize = 10,
     TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 9,
 })
 asFovLbl.Parent = aimSettings
@@ -2015,19 +2000,20 @@ reg(asFovLbl, "TextColor3", "SubText")
 local asFovTrack = new("Frame", {
     Position = UDim2.new(0, 18, 0, 152),
     Size = UDim2.new(1, -100, 0, 5),
-    BackgroundColor3 = P.Track, BorderSizePixel = 0, ZIndex = 9,
+    BackgroundColor3 = P.Track,
+    BorderSizePixel = 0, ZIndex = 9,
 })
 round(asFovTrack, 3); asFovTrack.Parent = aimSettings
 
 local asFovFill = new("Frame", {
-    Size = UDim2.new((Aimbot.FOV - 40) / 360, 0, 1, 0),
+    Size = UDim2.new((Aimbot.FOV - 40) / (400 - 40), 0, 1, 0),
     BackgroundColor3 = Accent.Main, BorderSizePixel = 0, ZIndex = 10,
 })
 round(asFovFill, 3); asFovFill.Parent = asFovTrack
 
 local asFovKnob = new("Frame", {
     AnchorPoint = Vector2.new(0.5, 0.5),
-    Position = UDim2.new((Aimbot.FOV - 40) / 360, 0, 0.5, 0),
+    Position = UDim2.new((Aimbot.FOV - 40) / (400 - 40), 0, 0.5, 0),
     Size = UDim2.new(0, 14, 0, 14),
     BackgroundColor3 = P.Knob, BorderSizePixel = 0, ZIndex = 11,
 })
@@ -2058,7 +2044,8 @@ end
 asFovTrack.InputBegan:Connect(function(input)
     local t = input.UserInputType
     if t == Enum.UserInputType.MouseButton1 or t == Enum.UserInputType.Touch then
-        asFovDragging = true; asFovSet(input.Position.X)
+        asFovDragging = true
+        asFovSet(input.Position.X)
     end
 end)
 UIS.InputChanged:Connect(function(input)
@@ -2076,12 +2063,13 @@ UIS.InputEnded:Connect(function(input)
     end
 end)
 
+-- 4. FOV palette
 local asPalLbl = new("TextLabel", {
     BackgroundTransparency = 1,
     Position = UDim2.new(0, 18, 0, 176),
     Size = UDim2.new(1, -36, 0, 14),
-    Text = "FOV COLOR", TextColor3 = P.SubText,
-    Font = Enum.Font.GothamMedium, TextSize = 10,
+    Text = "FOV COLOR",
+    TextColor3 = P.SubText, Font = Enum.Font.GothamMedium, TextSize = 10,
     TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 9,
 })
 asPalLbl.Parent = aimSettings
@@ -2134,6 +2122,7 @@ for i, c in ipairs(AIM_PRESETS) do
         ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
     })
     st3.Parent = sw
+    -- для белого — чёрная обводка снаружи
     if c.R > 0.95 and c.G > 0.95 and c.B > 0.95 then
         local blackSt = new("UIStroke", {
             Thickness = 2, Transparency = 0.15,
@@ -2141,6 +2130,7 @@ for i, c in ipairs(AIM_PRESETS) do
             ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
         })
         blackSt.Parent = sw
+        sw.ZIndex = 9
     end
     sw.Parent = asPalRow
     table.insert(asSwatches, { bg = sw, stroke = st3, color = c })
@@ -2148,15 +2138,35 @@ for i, c in ipairs(AIM_PRESETS) do
 end
 aimSelectColor(Aimbot.Color)
 
-if aimSettingsBtnRef then
-    aimSettingsBtnRef.MouseButton1Click:Connect(function()
+-- открытие/закрытие панели настроек
+do
+    local settingsBtn
+    for _, child in ipairs(combatScroll:GetChildren()) do
+        if child:IsA("Frame") then
+            for _, c2 in ipairs(child:GetChildren()) do
+                if c2:IsA("TextButton") and c2.Text == "⚙ НАСТРОЙКИ" then
+                    settingsBtn = c2; break
+                end
+            end
+        end
+    end
+    -- fallback
+    if not settingsBtn then
+        settingsBtn = new("TextButton", {
+            Position = UDim2.new(0, 0, 0, 0),
+            Size = UDim2.new(0, 0, 0, 0),
+            BackgroundTransparency = 1, Text = "",
+            Visible = false,
+        })
+    end
+    settingsBtn.MouseButton1Click:Connect(function()
         _G.MerediosSettingsOpen = true
         aimSettings.Visible = true
-        _setGT(aimSettings, 1)
+        aimSettings.GroupTransparency = 1
         aimSettings.BackgroundTransparency = 1
         aimSettingsStroke.Transparency = 1
         aimSettings.Size = UDim2.new(0, 290, 0, 270)
-        _tweenGT(aimSettings, 0.4, {
+        tween(aimSettings, 0.4, {
             GroupTransparency = 0,
             BackgroundTransparency = 0.02,
             Size = UDim2.new(0, 320, 0, 300),
@@ -2167,15 +2177,16 @@ end
 
 asClose.MouseButton1Click:Connect(function()
     _G.MerediosSettingsOpen = false
-    _tweenGT(aimSettings, 0.3, {
-        GroupTransparency = 1, BackgroundTransparency = 1,
+    tween(aimSettings, 0.3, {
+        GroupTransparency = 1,
+        BackgroundTransparency = 1,
         Size = UDim2.new(0, 290, 0, 270),
     }, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
     tween(aimSettingsStroke, 0.3, { Transparency = 1 })
     task.delay(0.3, function()
         aimSettings.Visible = false
         aimSettings.Size = UDim2.new(0, 320, 0, 300)
-        _setGT(aimSettings, 0)
+        aimSettings.GroupTransparency = 0
         aimSettings.BackgroundTransparency = 0.02
         aimSettingsStroke.Transparency = 0.12
     end)
@@ -2187,21 +2198,26 @@ end)
 local newScroll = makePage("NEW")
 
 do
-    local card = makeCard(newScroll, 1, "ОБНОВЛЕНИЕ v7.7.5", "t.me//meredioshub", 300)
+    local card = makeCard(newScroll, 1, "ОБНОВЛЕНИЕ v7.6", "t.me//meredioshub", 300)
     local body = new("TextLabel", {
         BackgroundTransparency = 1,
         Position = UDim2.new(0, 18, 0, 44),
         Size = UDim2.new(1, -36, 0, 250),
         Text = table.concat({
-            "• FIX: весь скрипт в __MAIN + pcall",
-            "• FIX: return true убран из глобала",
-            "• FIX: диагностика ошибки на экран",
-            "• FIX: os.date в pcall",
-            "• FIX: Logger выше applyTheme",
-            "• FIX: makeSwitch y работает",
-            "• FIX: PlayerRemoving через буфер",
-            "• WALLBANG — safe namecall hook",
-            "• AIMBOT — visible-only, FOV, палитра",
+            "• WALLBANG — ByteNet shot patch",
+            "  подмена origin+look в момент",
+            "  выстрела. работает на играх с",
+            "  ByteNet-протоколом",
+            "• AIMBOT — отдельная панель настроек",
+            "• AIMBOT — visible-only режим",
+            "  (aim+vis+esp вместе)",
+            "• AIMBOT — toggle круга",
+            "• AIMBOT — FOV слайдер + палитра",
+            "• AIMBOT — белый цвет с чёрной",
+            "  обводкой для читаемости",
+            "• GUI — компактные карточки",
+            "• GUI — обводки поверх контента",
+            "• GUI — анимация переключения вкладок",
             "• Telegram: t.me//meredioshub",
         }, "\n"),
         TextColor3 = P.Text,
@@ -2235,7 +2251,7 @@ end
 --=============================================================
 -- GENERAL SETTINGS
 --=============================================================
-local settings = _newCanvas({
+local settings = new("CanvasGroup", {
     AnchorPoint = Vector2.new(0.5, 0.5),
     Position = UDim2.new(0.5, 0, 0.5, 0),
     Size = UDim2.new(0, 320, 0, 220),
@@ -2416,7 +2432,8 @@ local tapHint = new("TextLabel", {
     Position = UDim2.new(0.5, 0, 1, 8),
     Size = UDim2.new(0, 150, 0, 26),
     BackgroundColor3 = P.BgGlass, BackgroundTransparency = 1,
-    Text = "2 times to open", TextColor3 = P.Text,
+    Text = "2 times to open",
+    TextColor3 = P.Text,
     Font = Enum.Font.GothamBold, TextSize = 11,
     BorderSizePixel = 0, TextTransparency = 1, Visible = false, ZIndex = 60,
 })
@@ -2513,26 +2530,11 @@ local started  = false
 local closeToken = 0
 
 local function openMenu()
-    for tName, page in pairs(contentPages) do
-        page.Visible = (tName == activeTab)
-        if tName == activeTab then
-            page.Position = UDim2.new(0, 0, 0, 0)
-            _setGT(page, 0)
-        end
-    end
-    for tName, btn in pairs(tabButtons) do
-        local on = (tName == activeTab)
-        btn.BackgroundTransparency = on and 0.05 or 0.85
-        btn.TextColor3 = on and Color3.fromRGB(255,255,255) or P.SubText
-        local st = btn:FindFirstChildOfClass("UIStroke")
-        if st then st.Transparency = on and 0 or 0.5 end
-    end
-
     menu.Visible = true
-    _setGT(menu, 1)
+    menu.GroupTransparency = 1
     menu.BackgroundTransparency = 0.04
     menuStroke.Transparency = 1
-    _tweenGT(menu, 0.35, { GroupTransparency = 0 })
+    tween(menu, 0.35, { GroupTransparency = 0 })
     tween(menuStroke, 0.35, { Transparency = 0.05 })
 end
 
@@ -2540,22 +2542,22 @@ local function closeMenu()
     _G.MerediosSettingsOpen = false
     closeToken = closeToken + 1
     local myToken = closeToken
-    _tweenGT(menu, 0.3, { GroupTransparency = 1 })
+    tween(menu, 0.3, { GroupTransparency = 1 })
     tween(menuStroke, 0.3, { Transparency = 1 })
-    _tweenGT(settings, 0.3, { GroupTransparency = 1, BackgroundTransparency = 1 })
+    tween(settings, 0.3, { GroupTransparency = 1, BackgroundTransparency = 1 })
     tween(settingsStroke, 0.3, { Transparency = 1 })
-    _tweenGT(aimSettings, 0.3, { GroupTransparency = 1, BackgroundTransparency = 1 })
+    tween(aimSettings, 0.3, { GroupTransparency = 1, BackgroundTransparency = 1 })
     tween(aimSettingsStroke, 0.3, { Transparency = 1 })
     task.delay(0.3, function()
         if closeToken ~= myToken then return end
         menu.Visible = false
-        _setGT(menu, 0)
+        menu.GroupTransparency = 0
         settings.Visible = false
-        _setGT(settings, 1)
+        settings.GroupTransparency = 1
         settings.BackgroundTransparency = 0.02
         settingsStroke.Transparency = 0.12
         aimSettings.Visible = false
-        _setGT(aimSettings, 1)
+        aimSettings.GroupTransparency = 1
         aimSettings.BackgroundTransparency = 0.02
         aimSettingsStroke.Transparency = 0.12
         mBtn.Visible = true
@@ -2612,12 +2614,13 @@ closeBtn.MouseButton1Click:Connect(closeMenu)
 gearBtn.MouseButton1Click:Connect(function()
     _G.MerediosSettingsOpen = true
     settings.Visible = true
-    _setGT(settings, 1)
+    settings.GroupTransparency = 1
     settings.BackgroundTransparency = 1
     settingsStroke.Transparency = 1
     settings.Size = UDim2.new(0, 290, 0, 200)
-    _tweenGT(settings, 0.4, {
-        GroupTransparency = 0, BackgroundTransparency = 0.02,
+    tween(settings, 0.4, {
+        GroupTransparency = 0,
+        BackgroundTransparency = 0.02,
         Size = UDim2.new(0, 320, 0, 220),
     }, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
     tween(settingsStroke, 0.4, { Transparency = 0.12 })
@@ -2627,8 +2630,9 @@ sClose.MouseButton1Click:Connect(function()
     _G.MerediosSettingsOpen = false
     local myToken = closeToken + 1
     closeToken = myToken
-    _tweenGT(settings, 0.3, {
-        GroupTransparency = 1, BackgroundTransparency = 1,
+    tween(settings, 0.3, {
+        GroupTransparency = 1,
+        BackgroundTransparency = 1,
         Size = UDim2.new(0, 290, 0, 200),
     }, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
     tween(settingsStroke, 0.3, { Transparency = 1 })
@@ -2636,56 +2640,21 @@ sClose.MouseButton1Click:Connect(function()
         if closeToken ~= myToken then return end
         settings.Visible = false
         settings.Size = UDim2.new(0, 320, 0, 220)
-        _setGT(settings, 0)
+        settings.GroupTransparency = 0
         settings.BackgroundTransparency = 0.02
         settingsStroke.Transparency = 0.12
     end)
 end)
 
---=============================================================
--- START HANDLER
---=============================================================
-local started_lock = false
-local function onStartBtn()
-    if started_lock then return end
-    started_lock = true
+startBtn.MouseButton1Click:Connect(function()
     started = true
-    logScript("START pressed")
-    pcall(function()
-        tween(startup, 0.4, { BackgroundTransparency = 1 })
-        tween(startupStroke, 0.4, { Transparency = 1 })
-        tween(startupTitle, 0.4, { TextTransparency = 1 })
-        tween(startupSub, 0.4, { TextTransparency = 1 })
-        tween(startupTapLbl, 0.4, { TextTransparency = 1 })
-        tween(startPill, 0.4, { BackgroundTransparency = 1 })
-        tween(startPillLbl, 0.4, { TextTransparency = 1 })
-    end)
+    tween(startup, 0.4, { GroupTransparency = 1 })
+    tween(startupStroke, 0.4, { Transparency = 1 })
     task.delay(0.4, function()
         startup.Visible = false
         openMenu()
-        logScript("Meredios HUD v7.7.5 started")
+        logScript("Meredios HUD v7.6 started")
     end)
-end
-
-startup.MouseButton1Click:Connect(onStartBtn)
-startup.Activated:Connect(onStartBtn)
-pcall(function() startup.TouchTap:Connect(onStartBtn) end)
-pcall(function() startup.TouchLongPress:Connect(onStartBtn) end)
-
-startPill.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.Touch
-       or input.UserInputType == Enum.UserInputType.MouseButton1 then
-        onStartBtn()
-    end
-end)
-
-UIS.InputBegan:Connect(function(input)
-    if started_lock then return end
-    if not startup or not startup.Visible then return end
-    if input.UserInputType == Enum.UserInputType.Touch
-       or input.UserInputType == Enum.UserInputType.MouseButton1 then
-        onStartBtn()
-    end
 end)
 
 for _, e in ipairs(ThemeReg) do
@@ -2694,64 +2663,25 @@ for _, e in ipairs(ThemeReg) do
 end
 
 menu.Visible = false
-_setGT(menu, 0)
+menu.GroupTransparency = 0
 menu.BackgroundTransparency = 0.04
 menuStroke.Transparency = 1
 settings.Visible = false
-_setGT(settings, 1)
+settings.GroupTransparency = 1
 settings.BackgroundTransparency = 0.02
 settingsStroke.Transparency = 1
 aimSettings.Visible = false
-_setGT(aimSettings, 1)
+aimSettings.GroupTransparency = 1
 aimSettings.BackgroundTransparency = 0.02
 aimSettingsStroke.Transparency = 1
 mBtn.Visible = false
+startup.Visible = true
+startup.GroupTransparency = 1
+startupStroke.Transparency = 1
 
-logScript("Kernel loaded · v7.7.5")
+logScript("Kernel loaded · v7.6")
 logScript("t.me//meredioshub")
-logScript("START: tap anywhere on panel")
+logScript("Wallbang ByteNet · Aimbot hard-lock")
 renderLog()
 
-print("[M7] end of script")
-
-end  -- __MAIN
-
-local __ok, __err = pcall(__MAIN)
-if not __ok then
-    warn("[MEREDIOS ERROR] " .. tostring(__err))
-    local sg = Instance.new("ScreenGui")
-    sg.Name = "MerediosErr"
-    sg.DisplayOrder = 100000
-    pcall(function() sg.Parent = game:GetService("CoreGui") end)
-    if not sg.Parent then
-        local _elp = nil
-        pcall(function() _elp = game:GetService("Players").LocalPlayer end)
-        if _elp then
-            local _epg = _elp:FindFirstChildOfClass("PlayerGui")
-            if not _epg then pcall(function() _epg = _elp.PlayerGui end) end
-            if not _epg then
-                local _ok4, _r4 = pcall(function() return _elp:WaitForChild("PlayerGui", 5) end)
-                if _ok4 and _r4 then _epg = _r4 end
-            end
-            if _epg then pcall(function() sg.Parent = _epg end) end
-        end
-    end
-    if sg.Parent then
-        local box = Instance.new("TextLabel")
-        box.Size = UDim2.new(0, 520, 0, 240)
-        box.Position = UDim2.new(0, 20, 0, 20)
-        box.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
-        box.BackgroundTransparency = 0.1
-        box.TextColor3 = Color3.fromRGB(255, 90, 90)
-        box.Text = "MEREDIOS ERROR:\n\n" .. tostring(__err)
-        box.TextWrapped = true
-        box.TextXAlignment = Enum.TextXAlignment.Left
-        box.TextYAlignment = Enum.TextYAlignment.Top
-        box.Font = Enum.Font.Code
-        box.TextSize = 13
-        box.Parent = sg
-        local c = Instance.new("UICorner")
-        c.CornerRadius = UDim.new(0, 10)
-        c.Parent = box
-    end
-end
+return true
