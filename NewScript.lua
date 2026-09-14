@@ -898,6 +898,7 @@ local startup = new("CanvasGroup", {
     Size = UDim2.new(0, 300, 0, 140),
     BackgroundColor3 = P.BgGlass, BackgroundTransparency = 0.05,
     BorderSizePixel = 0, GroupTransparency = 1,
+    Visible = true, Active = true, ZIndex = 10000,
 })
 round(startup, 20)
 local startupStroke = new("UIStroke", {
@@ -943,6 +944,7 @@ local startBtn = new("TextButton", {
     Font = Enum.Font.GothamBold, TextSize = 13,
     AutoButtonColor = false, BorderSizePixel = 0,
     TextTransparency = 1, BackgroundTransparency = 1,
+    Active = true, Selectable = true, ZIndex = 10001,
 })
 round(startBtn, 10)
 startBtn.Parent = startup
@@ -2646,31 +2648,39 @@ sClose.MouseButton1Click:Connect(function()
     end)
 end)
 
-local startHandled = false
+local start_locked = false
 
-local function handleStart()
-    if startHandled then return end
-    startHandled = true
-
+local function activateStart()
+    if start_locked or started or not startup.Visible then return end
+    start_locked = true
     started = true
+
+    startBtn.Active = false
+    startBtn.Selectable = false
+
+    tween(startBtn, 0.12, {
+        Size = UDim2.new(0, 154, 0, 34),
+    })
+
     tween(startup, 0.4, { GroupTransparency = 1 })
     tween(startupStroke, 0.4, { Transparency = 1 })
 
     task.delay(0.4, function()
+        if not startup.Parent then return end
         startup.Visible = false
         openMenu()
         logScript("Meredios HUD v7.6 started")
     end)
 end
 
--- MouseButton1Click covers normal mouse/touch activation. InputBegan is a
--- fallback for executors/mobile environments where the click signal can be
--- swallowed by the GUI input stack.
-startBtn.MouseButton1Click:Connect(handleStart)
+-- Activated is the correct cross-input event for mouse, touch and gamepad.
+startBtn.Activated:Connect(activateStart)
+
+-- Touch fallback for executors that do not forward Activated correctly.
 startBtn.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1
-        or input.UserInputType == Enum.UserInputType.Touch then
-        handleStart()
+    if input.UserInputType == Enum.UserInputType.Touch
+        or input.UserInputType == Enum.UserInputType.MouseButton1 then
+        activateStart()
     end
 end)
 
@@ -2692,28 +2702,15 @@ aimSettings.GroupTransparency = 1
 aimSettings.BackgroundTransparency = 0.02
 aimSettingsStroke.Transparency = 1
 mBtn.Visible = false
-
--- STARTUP FINAL STATE
--- The original code started the startup tweens and then immediately reset
--- the CanvasGroup to GroupTransparency=1, leaving the button effectively
--- invisible/non-interactive on some Roblox UI implementations.
 startup.Visible = true
 startup.Active = true
-startup.GroupTransparency = 0
-startup.BackgroundTransparency = 0.05
-startupStroke.Transparency = 0.08
-
+startup.ZIndex = 10000
+startup.GroupTransparency = 1
+startupStroke.Transparency = 1
 startBtn.Visible = true
 startBtn.Active = true
 startBtn.Selectable = true
-startBtn.ZIndex = 100
-startBtn.TextTransparency = 0
-startBtn.BackgroundTransparency = 0
-
--- Keep the startup surface above every later GUI element.
-startup.ZIndex = 100
-startupTitle.ZIndex = 101
-startupSub.ZIndex = 101
+startBtn.ZIndex = 10001
 
 logScript("Kernel loaded · v7.6")
 logScript("t.me//meredioshub")
