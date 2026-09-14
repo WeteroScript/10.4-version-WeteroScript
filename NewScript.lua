@@ -890,76 +890,6 @@ if LP then
 end
 
 --=============================================================
--- STARTUP
---=============================================================
-local startup = new("CanvasGroup", {
-    AnchorPoint = Vector2.new(0.5, 0.5),
-    Position = UDim2.new(0.5, 0, 0.5, 0),
-    Size = UDim2.new(0, 300, 0, 140),
-    BackgroundColor3 = P.BgGlass, BackgroundTransparency = 0.05,
-    BorderSizePixel = 0, GroupTransparency = 1,
-})
-round(startup, 20)
-local startupStroke = new("UIStroke", {
-    Thickness = 1, Transparency = 0.08,
-    ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
-    Color = Color3.new(1,1,1),
-})
-startupStroke.Parent = startup
-new("UIGradient", { Color = GradientColors, Rotation = 30 }).Parent = startupStroke
-startupStroke.Transparency = 1
-startup.Parent = ScreenGui
-reg(startup, "BackgroundColor3", "BgGlass")
-
-local startupTitle = new("TextLabel", {
-    BackgroundTransparency = 1,
-    Position = UDim2.new(0, -60, 0, 20),
-    Size = UDim2.new(1, -44, 0, 30),
-    Text = "Meredios",
-    TextColor3 = P.Text,
-    Font = Enum.Font.GothamBold, TextSize = 26,
-    TextXAlignment = Enum.TextXAlignment.Left, TextTransparency = 1,
-})
-startupTitle.Parent = startup
-reg(startupTitle, "TextColor3", "Text")
-
-local startupSub = new("TextLabel", {
-    BackgroundTransparency = 1,
-    Position = UDim2.new(0, -40, 0, 50),
-    Size = UDim2.new(1, -44, 0, 12),
-    Text = "// meridian core v7.6 · t.me//meredioshub",
-    TextColor3 = P.SubText,
-    Font = Enum.Font.Code, TextSize = 9,
-    TextXAlignment = Enum.TextXAlignment.Left, TextTransparency = 1,
-})
-startupSub.Parent = startup
-reg(startupSub, "TextColor3", "SubText")
-
-local startBtn = new("TextButton", {
-    Position = UDim2.new(0.5, 0, 1, -58), AnchorPoint = Vector2.new(0.5, 0),
-    Size = UDim2.new(0, 160, 0, 36),
-    BackgroundColor3 = Accent.Main,
-    Text = "НАЧАТЬ", TextColor3 = Color3.fromRGB(255,255,255),
-    Font = Enum.Font.GothamBold, TextSize = 13,
-    AutoButtonColor = false, BorderSizePixel = 0,
-    TextTransparency = 1, BackgroundTransparency = 1,
-})
-round(startBtn, 10)
-startBtn.Parent = startup
-
-tween(startup, 0.45, { GroupTransparency = 0 })
-tween(startupStroke, 0.45, { Transparency = 0.08 })
-
-task.spawn(function()
-    task.wait(0.7)
-    if not startup.Parent then return end
-    tween(startupTitle, 0.5, { Position = UDim2.new(0, 22, 0, 20), TextTransparency = 0 })
-    tween(startupSub, 0.5, { Position = UDim2.new(0, 22, 0, 50), TextTransparency = 0 })
-    task.wait(0.15)
-    tween(startBtn, 0.42, { TextTransparency = 0, BackgroundTransparency = 0 })
-end)
-
---=============================================================
 -- MENU
 --=============================================================
 local MENU_W, MENU_H = 420, 400
@@ -2646,12 +2576,7 @@ sClose.MouseButton1Click:Connect(function()
     end)
 end)
 
-startBtn.MouseButton1Click:Connect(function()
-    started = true
-    startup.Visible = false
-    openMenu()
-    logScript("Meredios HUD v7.6 started")
-end)
+
 
 for _, e in ipairs(ThemeReg) do
     local inst, prop, key = e[1], e[2], e[3]
@@ -2671,10 +2596,6 @@ aimSettings.GroupTransparency = 1
 aimSettings.BackgroundTransparency = 0.02
 aimSettingsStroke.Transparency = 1
 mBtn.Visible = false
-startup.Visible = false
-startup.GroupTransparency = 1
-startupStroke.Transparency = 1
-
 started = true
 openMenu()
 
