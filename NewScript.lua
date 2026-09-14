@@ -2646,15 +2646,32 @@ sClose.MouseButton1Click:Connect(function()
     end)
 end)
 
-startBtn.MouseButton1Click:Connect(function()
+local startHandled = false
+
+local function handleStart()
+    if startHandled then return end
+    startHandled = true
+
     started = true
     tween(startup, 0.4, { GroupTransparency = 1 })
     tween(startupStroke, 0.4, { Transparency = 1 })
+
     task.delay(0.4, function()
         startup.Visible = false
         openMenu()
         logScript("Meredios HUD v7.6 started")
     end)
+end
+
+-- MouseButton1Click covers normal mouse/touch activation. InputBegan is a
+-- fallback for executors/mobile environments where the click signal can be
+-- swallowed by the GUI input stack.
+startBtn.MouseButton1Click:Connect(handleStart)
+startBtn.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1
+        or input.UserInputType == Enum.UserInputType.Touch then
+        handleStart()
+    end
 end)
 
 for _, e in ipairs(ThemeReg) do
@@ -2675,9 +2692,28 @@ aimSettings.GroupTransparency = 1
 aimSettings.BackgroundTransparency = 0.02
 aimSettingsStroke.Transparency = 1
 mBtn.Visible = false
+
+-- STARTUP FINAL STATE
+-- The original code started the startup tweens and then immediately reset
+-- the CanvasGroup to GroupTransparency=1, leaving the button effectively
+-- invisible/non-interactive on some Roblox UI implementations.
 startup.Visible = true
-startup.GroupTransparency = 1
-startupStroke.Transparency = 1
+startup.Active = true
+startup.GroupTransparency = 0
+startup.BackgroundTransparency = 0.05
+startupStroke.Transparency = 0.08
+
+startBtn.Visible = true
+startBtn.Active = true
+startBtn.Selectable = true
+startBtn.ZIndex = 100
+startBtn.TextTransparency = 0
+startBtn.BackgroundTransparency = 0
+
+-- Keep the startup surface above every later GUI element.
+startup.ZIndex = 100
+startupTitle.ZIndex = 101
+startupSub.ZIndex = 101
 
 logScript("Kernel loaded · v7.6")
 logScript("t.me//meredioshub")
