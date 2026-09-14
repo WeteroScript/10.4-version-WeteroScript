@@ -1,4 +1,59 @@
+-- [COMPAT] task library fallback for older exploit environments
+if not task then
+    local _t = {}
+    _t.wait  = function(n) return wait(n or 0) end
+    _t.spawn = function(f, ...) local a = {...}; return spawn(function() f(table.unpack(a)) end) end
+    _t.delay = function(d, f) return delay(d, f) end
+    _t.defer = function(f) return spawn(f) end
+    task = _t
+end
+
 local __MAIN = function()
+
+-- [COMPAT] CanvasGroup fallback
+local _CANVAS_OK = pcall(function()
+    local _tmp = Instance.new("CanvasGroup"); _tmp:Destroy()
+end)
+local function _newCanvas(props)
+    local inst = Instance.new(_CANVAS_OK and "CanvasGroup" or "Frame")
+    if props then
+        for k, v in pairs(props) do
+            if _CANVAS_OK or k ~= "GroupTransparency" then
+                pcall(function() inst[k] = v end)
+            end
+        end
+    end
+    return inst
+end
+local function _setGT(obj, v)
+    if _CANVAS_OK then
+        pcall(function() _setGT(obj, v end))
+    else
+        pcall(function() obj.Visible = (v < 0.99) end)
+    end
+end
+local function _tweenGT(obj, t, props, style, dir)
+    if _CANVAS_OK then
+        return tween(obj, t, props, style, dir)
+    else
+        local safe = {}
+        for k, v in pairs(props) do
+            if k == "GroupTransparency" then
+                -- convert to visibility change after tween time
+                local _v = v
+                task.delay(t, function()
+                    if obj and obj.Parent then
+                        pcall(function() obj.Visible = (_v < 0.99) end)
+                    end
+                end)
+            else
+                safe[k] = v
+            end
+        end
+        if next(safe) then return tween(obj, t, safe, style, dir) end
+    end
+end
+
 
 --[[
     MEREDIOS v7.7.5 — оперативный контур
@@ -56,7 +111,33 @@ do
         end
     end
     if not parented then
-        ScreenGui.Parent = LP:WaitForChild("PlayerGui", 10) or LP.PlayerGui
+        -- попытка 1: FindFirstChild (не ждём)
+        local _pg = LP:FindFirstChildOfClass("PlayerGui")
+        -- попытка 2: WaitForChild с коротким таймаутом
+        if not _pg then
+            local _ok2, _r2 = pcall(function() return LP:WaitForChild("PlayerGui", 8) end)
+            if _ok2 and _r2 then _pg = _r2 end
+        end
+        -- попытка 3: прямой доступ
+        if not _pg then pcall(function() _pg = LP.PlayerGui end) end
+        if _pg then
+            local _ok3 = pcall(function() ScreenGui.Parent = _pg end)
+            parented = _ok3 and ScreenGui.Parent ~= nil
+        end
+    end
+    -- попытка 4: отложенный retry если всё выше провалилось
+    if not parented then
+        task.spawn(function()
+            for _i = 1, 30 do
+                task.wait(0.5)
+                local _pg2 = LP:FindFirstChildOfClass("PlayerGui")
+                if _pg2 then
+                    if pcall(function() ScreenGui.Parent = _pg2 end) and ScreenGui.Parent then
+                        break
+                    end
+                end
+            end
+        end)
     end
 end
 
@@ -994,7 +1075,7 @@ startPillLbl.Parent = startPill
 --=============================================================
 local MENU_W, MENU_H = 420, 400
 
-local menu = new("CanvasGroup", {
+local menu = _newCanvas({
     AnchorPoint = Vector2.new(0.5, 0.5),
     Position = UDim2.new(0.5, 0, 0.5, 0),
     Size = UDim2.new(0, MENU_W, 0, MENU_H),
@@ -1168,7 +1249,7 @@ local function switchTab(name)
         if tName == name then
             page.Visible = true
             page.Position = UDim2.new(0.12, 0, 0, 0)
-            page.GroupTransparency = 0.6
+            _setGT(page, 0.6)
             tween(page, 0.32, {
                 Position = UDim2.new(0, 0, 0, 0),
                 GroupTransparency = 0,
@@ -1190,13 +1271,13 @@ local function switchTab(name)
     local cur = contentPages[name]
     if cur then
         cur.Position = UDim2.new(0, 0, 0, 0)
-        cur.GroupTransparency = 0
+        _setGT(cur, 0)
         cur.Visible = true
     end
 end
 
 local function makePage(name)
-    local page = new("CanvasGroup", {
+    local page = _newCanvas({
         Size = UDim2.new(1, 0, 1, 0),
         Position = UDim2.new(0, 0, 0, 0),
         BackgroundTransparency = 1, GroupTransparency = 0,
@@ -1767,7 +1848,7 @@ end
 --=============================================================
 -- AIMBOT SETTINGS PANEL
 --=============================================================
-local aimSettings = new("CanvasGroup", {
+local aimSettings = _newCanvas({
     AnchorPoint = Vector2.new(0.5, 0.5),
     Position = UDim2.new(0.5, 0, 0.5, 0),
     Size = UDim2.new(0, 320, 0, 300),
@@ -2071,11 +2152,11 @@ if aimSettingsBtnRef then
     aimSettingsBtnRef.MouseButton1Click:Connect(function()
         _G.MerediosSettingsOpen = true
         aimSettings.Visible = true
-        aimSettings.GroupTransparency = 1
+        _setGT(aimSettings, 1)
         aimSettings.BackgroundTransparency = 1
         aimSettingsStroke.Transparency = 1
         aimSettings.Size = UDim2.new(0, 290, 0, 270)
-        tween(aimSettings, 0.4, {
+        _tweenGT(aimSettings, 0.4, {
             GroupTransparency = 0,
             BackgroundTransparency = 0.02,
             Size = UDim2.new(0, 320, 0, 300),
@@ -2086,7 +2167,7 @@ end
 
 asClose.MouseButton1Click:Connect(function()
     _G.MerediosSettingsOpen = false
-    tween(aimSettings, 0.3, {
+    _tweenGT(aimSettings, 0.3, {
         GroupTransparency = 1, BackgroundTransparency = 1,
         Size = UDim2.new(0, 290, 0, 270),
     }, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
@@ -2094,7 +2175,7 @@ asClose.MouseButton1Click:Connect(function()
     task.delay(0.3, function()
         aimSettings.Visible = false
         aimSettings.Size = UDim2.new(0, 320, 0, 300)
-        aimSettings.GroupTransparency = 0
+        _setGT(aimSettings, 0)
         aimSettings.BackgroundTransparency = 0.02
         aimSettingsStroke.Transparency = 0.12
     end)
@@ -2154,7 +2235,7 @@ end
 --=============================================================
 -- GENERAL SETTINGS
 --=============================================================
-local settings = new("CanvasGroup", {
+local settings = _newCanvas({
     AnchorPoint = Vector2.new(0.5, 0.5),
     Position = UDim2.new(0.5, 0, 0.5, 0),
     Size = UDim2.new(0, 320, 0, 220),
@@ -2436,7 +2517,7 @@ local function openMenu()
         page.Visible = (tName == activeTab)
         if tName == activeTab then
             page.Position = UDim2.new(0, 0, 0, 0)
-            page.GroupTransparency = 0
+            _setGT(page, 0)
         end
     end
     for tName, btn in pairs(tabButtons) do
@@ -2448,10 +2529,10 @@ local function openMenu()
     end
 
     menu.Visible = true
-    menu.GroupTransparency = 1
+    _setGT(menu, 1)
     menu.BackgroundTransparency = 0.04
     menuStroke.Transparency = 1
-    tween(menu, 0.35, { GroupTransparency = 0 })
+    _tweenGT(menu, 0.35, { GroupTransparency = 0 })
     tween(menuStroke, 0.35, { Transparency = 0.05 })
 end
 
@@ -2459,22 +2540,22 @@ local function closeMenu()
     _G.MerediosSettingsOpen = false
     closeToken = closeToken + 1
     local myToken = closeToken
-    tween(menu, 0.3, { GroupTransparency = 1 })
+    _tweenGT(menu, 0.3, { GroupTransparency = 1 })
     tween(menuStroke, 0.3, { Transparency = 1 })
-    tween(settings, 0.3, { GroupTransparency = 1, BackgroundTransparency = 1 })
+    _tweenGT(settings, 0.3, { GroupTransparency = 1, BackgroundTransparency = 1 })
     tween(settingsStroke, 0.3, { Transparency = 1 })
-    tween(aimSettings, 0.3, { GroupTransparency = 1, BackgroundTransparency = 1 })
+    _tweenGT(aimSettings, 0.3, { GroupTransparency = 1, BackgroundTransparency = 1 })
     tween(aimSettingsStroke, 0.3, { Transparency = 1 })
     task.delay(0.3, function()
         if closeToken ~= myToken then return end
         menu.Visible = false
-        menu.GroupTransparency = 0
+        _setGT(menu, 0)
         settings.Visible = false
-        settings.GroupTransparency = 1
+        _setGT(settings, 1)
         settings.BackgroundTransparency = 0.02
         settingsStroke.Transparency = 0.12
         aimSettings.Visible = false
-        aimSettings.GroupTransparency = 1
+        _setGT(aimSettings, 1)
         aimSettings.BackgroundTransparency = 0.02
         aimSettingsStroke.Transparency = 0.12
         mBtn.Visible = true
@@ -2531,11 +2612,11 @@ closeBtn.MouseButton1Click:Connect(closeMenu)
 gearBtn.MouseButton1Click:Connect(function()
     _G.MerediosSettingsOpen = true
     settings.Visible = true
-    settings.GroupTransparency = 1
+    _setGT(settings, 1)
     settings.BackgroundTransparency = 1
     settingsStroke.Transparency = 1
     settings.Size = UDim2.new(0, 290, 0, 200)
-    tween(settings, 0.4, {
+    _tweenGT(settings, 0.4, {
         GroupTransparency = 0, BackgroundTransparency = 0.02,
         Size = UDim2.new(0, 320, 0, 220),
     }, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
@@ -2546,7 +2627,7 @@ sClose.MouseButton1Click:Connect(function()
     _G.MerediosSettingsOpen = false
     local myToken = closeToken + 1
     closeToken = myToken
-    tween(settings, 0.3, {
+    _tweenGT(settings, 0.3, {
         GroupTransparency = 1, BackgroundTransparency = 1,
         Size = UDim2.new(0, 290, 0, 200),
     }, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
@@ -2555,7 +2636,7 @@ sClose.MouseButton1Click:Connect(function()
         if closeToken ~= myToken then return end
         settings.Visible = false
         settings.Size = UDim2.new(0, 320, 0, 220)
-        settings.GroupTransparency = 0
+        _setGT(settings, 0)
         settings.BackgroundTransparency = 0.02
         settingsStroke.Transparency = 0.12
     end)
@@ -2613,15 +2694,15 @@ for _, e in ipairs(ThemeReg) do
 end
 
 menu.Visible = false
-menu.GroupTransparency = 0
+_setGT(menu, 0)
 menu.BackgroundTransparency = 0.04
 menuStroke.Transparency = 1
 settings.Visible = false
-settings.GroupTransparency = 1
+_setGT(settings, 1)
 settings.BackgroundTransparency = 0.02
 settingsStroke.Transparency = 1
 aimSettings.Visible = false
-aimSettings.GroupTransparency = 1
+_setGT(aimSettings, 1)
 aimSettings.BackgroundTransparency = 0.02
 aimSettingsStroke.Transparency = 1
 mBtn.Visible = false
@@ -2643,7 +2724,17 @@ if not __ok then
     sg.DisplayOrder = 100000
     pcall(function() sg.Parent = game:GetService("CoreGui") end)
     if not sg.Parent then
-        pcall(function() sg.Parent = game:GetService("Players").LocalPlayer:WaitForChild("PlayerGui", 3) end)
+        local _elp = nil
+        pcall(function() _elp = game:GetService("Players").LocalPlayer end)
+        if _elp then
+            local _epg = _elp:FindFirstChildOfClass("PlayerGui")
+            if not _epg then pcall(function() _epg = _elp.PlayerGui end) end
+            if not _epg then
+                local _ok4, _r4 = pcall(function() return _elp:WaitForChild("PlayerGui", 5) end)
+                if _ok4 and _r4 then _epg = _r4 end
+            end
+            if _epg then pcall(function() sg.Parent = _epg end) end
+        end
     end
     if sg.Parent then
         local box = Instance.new("TextLabel")
