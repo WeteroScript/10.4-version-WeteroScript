@@ -808,7 +808,12 @@ local function aimbotStep()
 end
 
 pcall(function() RunService:UnbindFromRenderStep("MerediosAimbot") end)
-RunService:BindToRenderStep("MerediosAimbot", Enum.RenderPriority.Camera.Value + 1, aimbotStep)
+local __bindOk = pcall(function()
+    RunService:BindToRenderStep("MerediosAimbot", Enum.RenderPriority.Camera.Value + 1, aimbotStep)
+end)
+if not __bindOk then
+    RunService.Heartbeat:Connect(aimbotStep)
+end
 
 print("[M4] aimbot block OK")
 
