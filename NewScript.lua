@@ -1,12 +1,14 @@
 --[[
-    MEREDIOS HUD v8.6 · key-gated
+    MEREDIOS HUD v8.6 · key-gated · FIXED
     t.me//meredioshub
+    fixes: request() instead of HttpService:PostAsync, Logger forward-decl, kick softened
 ]]
 
 --================= KEY GATE =================
 local API_URL    = "https://bot-1789589906-7119-weterochina.bothost.tech/validate"
 local API_SECRET = "hK2pX9qLm4vN8sT1wZ6yB3cD7fG0jR5aQxYzWvUtSrPo"
 local KICK_REASON = "key is not allowed"
+local AUTO_KICK   = false  -- set true to kick on bad key
 
 local KICK_STATUS = {
     not_found=true, revoked=true, expired=true,
@@ -37,19 +39,37 @@ local function getHWID()
     if ok and id then return id end
     return tostring(LP.UserId) .. ":" .. tostring(game.PlaceId)
 end
-
 local HWID = getHWID()
 
+-- universal HTTP: executors don't expose HttpService:PostAsync on client
+local function httpRequest(opts)
+    local fns = {}
+    if syn and syn.request then table.insert(fns, syn.request) end
+    if http and http.request then table.insert(fns, http.request) end
+    if type(request) == "function" then table.insert(fns, request) end
+    if type(http_request) == "function" then table.insert(fns, http_request) end
+    for _, fn in ipairs(fns) do
+        local ok, resp = pcall(fn, opts)
+        if ok and resp then
+            local body = resp.Body or resp.body
+            if body then return body end
+        end
+    end
+    return nil
+end
+
 local function requestValidate(key)
-    local ok, resp = pcall(function()
-        return HttpSvc:PostAsync(
-            API_URL,
-            HttpSvc:JSONEncode({ key = key, hwid = HWID }),
-            Enum.HttpContentType.ApplicationJson, false,
-            { ["X-Api-Secret"] = API_SECRET }
-        )
-    end)
-    if not ok or not resp then return nil end
+    local body = HttpSvc:JSONEncode({ key = key, hwid = HWID })
+    local resp = httpRequest({
+        Url = API_URL,
+        Method = "POST",
+        Body = body,
+        Headers = {
+            ["Content-Type"]  = "application/json",
+            ["X-Api-Secret"]  = API_SECRET,
+        },
+    })
+    if not resp then return nil end
     local okd, data = pcall(function() return HttpSvc:JSONDecode(resp) end)
     if not okd then return nil end
     return data
@@ -93,6 +113,9 @@ do
         ScreenGui.Parent = LP:WaitForChild("PlayerGui", 10) or LP.PlayerGui
     end
 end
+
+--================= FORWARD DECLS =================
+local Logger  -- used in applyTheme below, actual table filled later
 
 --================= THEME =================
 local Theme = { mode = "Light", accent = "DarkBlue", anim = true }
@@ -229,7 +252,7 @@ local function applyTheme()
         end
     end
     for _, entry in ipairs(LogTabButtons) do
-        local active = (entry.name == Logger.activeTab)
+        local active = Logger and (entry.name == Logger.activeTab)
         entry.btn.BackgroundColor3 = active and Accent.Main or P.Card
         entry.btn.TextColor3 = active and Color3.fromRGB(255,255,255) or P.SubText
     end
@@ -239,7 +262,7 @@ local function applyTheme()
 end
 
 --================= LOGGER =================
-local Logger = {
+Logger = {
     buffer = { server = {}, script = {} }, maxLen = 600,
     listeners = {}, filterListeners = {},
     activeTab = "script", filters = {}, knownRemotes = {},
@@ -306,7 +329,6 @@ local function logRemote(name, args)
     logServer("REMOTE " .. name .. "(" .. table.concat(parts, ", ") .. ")" .. suffix)
 end
 
--- remote namecall hook (logging only)
 do
     local okMT, mt = pcall(getrawmetatable, game)
     if okMT and mt and newcclosure and setreadonly then
@@ -754,19 +776,7 @@ end
 
 --================= SERVER HOP =================
 local function httpGet(url)
-    local fns = {}
-    if syn and syn.request then table.insert(fns, syn.request) end
-    if http and http.request then table.insert(fns, http.request) end
-    if type(request) == "function" then table.insert(fns, request) end
-    if type(http_request) == "function" then table.insert(fns, http_request) end
-    for _, fn in ipairs(fns) do
-        local ok, resp = pcall(fn, { Url = url, Method = "GET" })
-        if ok and resp then
-            local body = resp.Body or resp.body
-            if body then return body end
-        end
-    end
-    return nil
+    return httpRequest({ Url = url, Method = "GET" })
 end
 local function fetchServerList(pages)
     pages = pages or 3
@@ -862,7 +872,6 @@ local startupSub = new("TextLabel", {
 startupSub.Parent = startup
 reg(startupSub, "TextColor3", "SubText")
 
--- input row: [TextBox ............] [✕]
 local keyRow = new("Frame", {
     Position=UDim2.new(0, 18, 0, 66),
     Size=UDim2.new(1, -36, 0, 30),
@@ -913,7 +922,6 @@ local keyStatus = new("TextLabel", {
 })
 keyStatus.Parent = startup
 
--- buttons row: [CHECK KEY] [НАЧАТЬ]
 local checkBtn = new("TextButton", {
     Position=UDim2.new(0, 18, 1, -50),
     Size=UDim2.new(0, 100, 0, 28),
@@ -994,7 +1002,7 @@ local function doKeyCheck(auto)
         keyStatus.Text = "❌ " .. (STATUS_TEXT[resp.status] or tostring(resp.status))
         keyStatus.TextColor3 = Color3.fromRGB(255, 90, 90)
 
-        if KICK_STATUS[resp.status] then
+        if AUTO_KICK and KICK_STATUS[resp.status] then
             task.wait(0.9)
             pcall(function() LP:Kick(KICK_REASON) end)
         end
@@ -2389,7 +2397,6 @@ closeBtn.MouseButton1Click:Connect(closeMenu)
 --================= START BUTTON =================
 startBtn.MouseButton1Click:Connect(function()
     if not keyValidated then
-        -- trigger check on click if not validated yet
         doKeyCheck(false)
         return
     end
