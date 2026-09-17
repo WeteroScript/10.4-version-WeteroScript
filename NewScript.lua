@@ -2,7 +2,8 @@
     MEREDIOS HUD v8.6 · register-safe
     t.me//meredioshub
     fixes: do..end scoping, PostAsync -> request, Logger forward-decl,
-           UIPadding allocation, new() parent-as-table bug
+           UIPadding allocation, new() parent-as-table bug,
+           morph started-flag propagation
 ]]
 
 --================= TOP SERVICES =================
@@ -2420,6 +2421,7 @@ end
 --================= OPEN / CLOSE / MORPH =================
 do
     local morphing, started, closeToken = false, false, 0
+    _G.Meredios_markStarted = function() started = true end
 
     local function openMenu()
         menu.Visible = true
@@ -2546,6 +2548,7 @@ _G.Meredios_startBtn.MouseButton1Click:Connect(function()
     if not keyValidated then
         return
     end
+    if _G.Meredios_markStarted then _G.Meredios_markStarted() end
     tween(_G.Meredios_startup, 0.4, { GroupTransparency=1 })
     tween(_G.Meredios_startupStroke, 0.4, { Transparency=1 })
     task.delay(0.4, function()
