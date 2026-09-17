@@ -1,9 +1,8 @@
 --[[
     MEREDIOS HUD v8.6 · register-safe
     t.me//meredioshub
-    fixes: do..end scoping to stay under Luau 200-register limit
-           HttpService:PostAsync -> request()
-           Logger forward-declared
+    fixes: do..end scoping, HttpService:PostAsync -> request(),
+           Logger forward-decl, UIPadding allocation
 ]]
 
 --================= TOP SERVICES =================
@@ -273,7 +272,7 @@ Logger = {
     activeTab = "script", filters = {}, knownRemotes = {},
 }
 
-do -- clipboard + log text
+do
     local function copyToClipboard(text)
         local fns = { setclipboard, toclipboard, writeclipboard }
         for _, fn in ipairs(fns) do
@@ -297,7 +296,7 @@ do -- clipboard + log text
     Logger.buildText = buildLogText
 end
 
-do -- remote hook
+do
     local function fmtArg(a)
         local t = typeof(a)
         if t == "Vector3" then return string.format("V3(%.1f,%.1f,%.1f)", a.X, a.Y, a.Z)
@@ -613,7 +612,7 @@ do
     Aimbot._setColor = setAimbotColor
 end
 
-do -- aimbot logic
+do
     local function getHeadPos(plr)
         local char = plr.Character; if not char then return nil end
         local head = char:FindFirstChild("Head")
@@ -903,7 +902,11 @@ do
     keyBox.ClearTextOnFocus = false
     keyBox.TextXAlignment = Enum.TextXAlignment.Left
     round(keyBox, 7)
-    new("UIPadding", keyBox).PaddingLeft = UDim.new(0, 8)
+    do
+        local kp = Instance.new("UIPadding")
+        kp.PaddingLeft = UDim.new(0, 8)
+        kp.Parent = keyBox
+    end
     reg(keyBox, "BackgroundColor3", "Bg")
     reg(keyBox, "TextColor3", "Text")
     reg(keyBox, "PlaceholderColor3", "SubText")
@@ -1014,12 +1017,12 @@ do
     _G.Meredios_startupStroke = startupStroke
 end
 
---================= MENU HELPERS (shared by pages) =================
+--================= MENU HELPERS =================
 local makePage, makeTab, makeRow, makeSwitch, makeSlider, makeColorPaletteDynamic
 local tabBar, contentBox, tabButtons, contentPages
 local activeTab = "MAIN"
 
-do -- menu shell
+do
     local MENU_W, MENU_H = 420, 400
     menu = new("CanvasGroup", {
         AnchorPoint=Vector2.new(0.5,0.5), Position=UDim2.new(0.5,0,0.5,0),
@@ -1125,7 +1128,7 @@ do -- menu shell
     _G.Meredios_menuStroke = menuStroke
 end
 
-do -- page helpers
+do
     local function animatePageIn(page)
         page.Position = UDim2.new(0,0,0,26)
         tween(page, 0.38, { Position=UDim2.new(0,0,0,0) }, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
@@ -1146,7 +1149,7 @@ do -- page helpers
             end
         end
     end
-    function _G.Meredios_animatePageIn(page) animatePageIn(page) end
+    _G.Meredios_animatePageIn = animatePageIn
 
     local function switchTab(name)
         activeTab = name
@@ -1400,7 +1403,7 @@ do
         SortOrder=Enum.SortOrder.LayoutOrder, HorizontalAlignment=Enum.HorizontalAlignment.Center,
     }).Parent = page
 
-    do -- speed
+    do
         local card = makeRow(page, 1, "SPEED WALK", "ускоряет ходьбу · 8–500")
         local box = new("TextBox", {
             Position=UDim2.new(1,-126,0,12), Size=UDim2.new(0,58,0,22),
@@ -1427,7 +1430,7 @@ do
         end)
     end
 
-    do -- anti fling
+    do
         local card = makeRow(page, 2, "ANTI-FLING", "гасит раскрутку от чужих эксплойтов")
         makeSwitch(card, 12, function(v)
             AntiFling.Enabled = v
@@ -1435,7 +1438,7 @@ do
         end)
     end
 
-    do -- rejoin
+    do
         local card = makeRow(page, 3, "REJOIN", "переподключение к текущему серверу", 58)
         local btn = new("TextButton", {
             Position=UDim2.new(0,12,0,40), Size=UDim2.new(1,-24,0,24),
@@ -1451,7 +1454,7 @@ do
         end)
     end
 
-    do -- server hop
+    do
         local card = makeRow(page, 4, "SERVER HOP", "переброс на другой сервер игры", 58)
         local btn = new("TextButton", {
             Position=UDim2.new(0,12,0,40), Size=UDim2.new(1,-24,0,24),
@@ -1464,7 +1467,7 @@ do
         btn.MouseButton1Click:Connect(function() task.spawn(serverHop) end)
     end
 
-    do -- empty hop
+    do
         local card = makeRow(page, 5, "EMPTY HOP", "сервер с 0 игроков", 58)
         local btn = new("TextButton", {
             Position=UDim2.new(0,12,0,40), Size=UDim2.new(1,-24,0,24),
@@ -1641,7 +1644,7 @@ do
         SortOrder=Enum.SortOrder.LayoutOrder, HorizontalAlignment=Enum.HorizontalAlignment.Center,
     }).Parent = page
 
-    do -- hitbox
+    do
         local card = makeRow(page, 1, "HITBOX CHANGER", "увеличивает хитбокс игроков · VIEW границы", 100)
         local box = new("TextBox", {
             Position=UDim2.new(1,-126,0,46), Size=UDim2.new(0,58,0,22),
@@ -1693,7 +1696,7 @@ do
         viewBtn.MouseButton1Click:Connect(function() setView(not viewState) end)
     end
 
-    do -- esp
+    do
         local card = makeRow(page, 2, "ESP", "подсвечивает игроков · зелёный = виден", 180)
         local setESPEnabled = makeSwitch(card, 12, function(v)
             ESP.Enabled = v; ESP.refreshAll()
@@ -1733,7 +1736,7 @@ do
         _G.Meredios_setESPVis = setESPVis
     end
 
-    do -- aimbot
+    do
         local card = makeRow(page, 3, "AIMBOT", "жёсткий лок на голову · настройки в ⚙", 68)
         local aimGear = new("TextButton", {
             Position=UDim2.new(1,-126,0,40), Size=UDim2.new(0,28,0,22),
@@ -2541,7 +2544,6 @@ _G.Meredios_startBtn.MouseButton1Click:Connect(function()
     if not keyValidated then
         return
     end
-    _G.Meredios_startup.Visible = true
     tween(_G.Meredios_startup, 0.4, { GroupTransparency=1 })
     tween(_G.Meredios_startupStroke, 0.4, { Transparency=1 })
     task.delay(0.4, function()
