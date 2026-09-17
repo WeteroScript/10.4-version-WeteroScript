@@ -1,8 +1,8 @@
 --[[
     MEREDIOS HUD v8.6 · register-safe
     t.me//meredioshub
-    fixes: do..end scoping, HttpService:PostAsync -> request(),
-           Logger forward-decl, UIPadding allocation
+    fixes: do..end scoping, PostAsync -> request, Logger forward-decl,
+           UIPadding allocation, new() parent-as-table bug
 ]]
 
 --================= TOP SERVICES =================
@@ -887,7 +887,8 @@ do
     })
     keyRow.Parent = startup
 
-    local keyBox = new("TextBox", keyRow)
+    local keyBox = new("TextBox")
+    keyBox.Parent = keyRow
     keyBox.Position = UDim2.new(0, 0, 0, 0)
     keyBox.Size = UDim2.new(1, -38, 1, 0)
     keyBox.BackgroundColor3 = P.Bg
@@ -911,7 +912,8 @@ do
     reg(keyBox, "TextColor3", "Text")
     reg(keyBox, "PlaceholderColor3", "SubText")
 
-    local keyClear = new("TextButton", keyRow)
+    local keyClear = new("TextButton")
+    keyClear.Parent = keyRow
     keyClear.AnchorPoint = Vector2.new(1, 0)
     keyClear.Position = UDim2.new(1, 0, 0, 0)
     keyClear.Size = UDim2.new(0, 32, 1, 0)
