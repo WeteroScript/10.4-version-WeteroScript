@@ -1,9 +1,6 @@
 --[[
-    MEREDIOS HUD v8.6 · register-safe
+    MEREDIOS HUD v8.6 · fling + compact ESP
     t.me//meredioshub
-    fixes: do..end scoping, PostAsync -> request, Logger forward-decl,
-           UIPadding allocation, new() parent-as-table bug,
-           morph started-flag propagation
 ]]
 
 --================= TOP SERVICES =================
@@ -25,11 +22,11 @@ local SwitchRegistry = {}
 local LogTabButtons  = {}
 local SegRegistry    = {}
 local Logger
-local ESP, HitboxChanger, Speed, AntiFling, Aimbot
-local ScreenGui, startup, menu, settings, aimPanel, filterPanel, mBtn
+local ESP, HitboxChanger, Speed, AntiFling, Aimbot, Fling
+local ScreenGui, startup, menu, settings, aimPanel, mBtn
 local keyValidated = false
 
---================= THEME TABLES =================
+--================= THEME =================
 local Theme = { mode = "Light", accent = "DarkBlue", anim = true }
 local Palettes = {
     Light = {
@@ -69,7 +66,7 @@ local BluePinkSeq = ColorSequence.new({
 local function refreshPalettes() P = Palettes[Theme.mode]; Accent = Accents[Theme.accent] end
 refreshPalettes()
 
---================= SHARED HELPERS =================
+--================= HELPERS =================
 local function new(c, p)
     local o = Instance.new(c); if p then for k,v in pairs(p) do o[k]=v end end; return o
 end
@@ -94,22 +91,17 @@ do
         lastGradTick = now
         for i = #AnimatedGradients, 1, -1 do
             local e = AnimatedGradients[i]
-            if not e.g or not e.g.Parent then
-                table.remove(AnimatedGradients, i)
-            else
-                e.g.Rotation = (e.base + now * e.speed) % 360
-            end
+            if not e.g or not e.g.Parent then table.remove(AnimatedGradients, i)
+            else e.g.Rotation = (e.base + now * e.speed) % 360 end
         end
     end)
 end
 
 local function gradientStroke(parent, thickness, transparency, rotation)
     local stroke = new("UIStroke", {
-        Thickness = thickness or 2,
-        Transparency = transparency or 0.05,
+        Thickness = thickness or 2, Transparency = transparency or 0.05,
         ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
-        LineJoinMode = Enum.LineJoinMode.Round,
-        Color = Color3.new(1,1,1),
+        LineJoinMode = Enum.LineJoinMode.Round, Color = Color3.new(1,1,1),
     })
     stroke.Parent = parent
     local grad = new("UIGradient", { Color = FlowColors, Rotation = rotation or 35 })
@@ -261,20 +253,17 @@ do
             parented = ok and ScreenGui.Parent ~= nil
         end
     end
-    if not parented then
-        ScreenGui.Parent = LP:WaitForChild("PlayerGui", 10) or LP.PlayerGui
-    end
+    if not parented then ScreenGui.Parent = LP:WaitForChild("PlayerGui", 10) or LP.PlayerGui end
 end
 
---================= LOGGER =================
+--================= LOGGER (internal) =================
 Logger = {
     buffer = { server = {}, script = {} }, maxLen = 600,
     listeners = {}, filterListeners = {},
     activeTab = "script", filters = {}, knownRemotes = {},
 }
-
 do
-    local function copyToClipboard(text)
+    Logger.copy = function(text)
         local fns = { setclipboard, toclipboard, writeclipboard }
         for _, fn in ipairs(fns) do
             if type(fn) == "function" then
@@ -283,7 +272,7 @@ do
         end
         return false
     end
-    local function buildLogText()
+    Logger.buildText = function()
         local out = {}
         table.insert(out, "=== SERVER LOG ===")
         if #Logger.buffer.server == 0 then table.insert(out, "(empty)") end
@@ -292,63 +281,6 @@ do
         if #Logger.buffer.script == 0 then table.insert(out, "(empty)") end
         for _, l in ipairs(Logger.buffer.script) do table.insert(out, l) end
         return table.concat(out, "\n")
-    end
-    Logger.copy = copyToClipboard
-    Logger.buildText = buildLogText
-end
-
-do
-    local function fmtArg(a)
-        local t = typeof(a)
-        if t == "Vector3" then return string.format("V3(%.1f,%.1f,%.1f)", a.X, a.Y, a.Z)
-        elseif t == "Vector2" then return string.format("V2(%.1f,%.1f)", a.X, a.Y)
-        elseif t == "CFrame" then return "CFrame"
-        elseif t == "Instance" then
-            local ok, n = pcall(function() return a:GetFullName() end)
-            return ok and n or "Instance"
-        elseif t == "table" then return "{table}"
-        else return tostring(a) end
-    end
-    local remoteRateCount, remoteRateWindow = 0, 0
-    local MAX_REMOTE_RATE = 80
-    local function rememberRemote(name)
-        if not Logger.knownRemotes[name] then
-            Logger.knownRemotes[name] = true
-            for _, cb in ipairs(Logger.filterListeners) do pcall(cb) end
-        end
-    end
-    local function logRemote(name, args)
-        rememberRemote(name)
-        if Logger.filters[name] == false then return end
-        local now = tick()
-        if now > remoteRateWindow then remoteRateWindow = now + 1; remoteRateCount = 0 end
-        if remoteRateCount >= MAX_REMOTE_RATE then return end
-        remoteRateCount = remoteRateCount + 1
-        local parts = {}
-        for i = 1, math.min(#args, 8) do parts[i] = fmtArg(args[i]) end
-        local suffix = #args > 8 and (" ...(+" .. (#args - 8) .. ")") or ""
-        logServer("REMOTE " .. name .. "(" .. table.concat(parts, ", ") .. ")" .. suffix)
-    end
-    local okMT, mt = pcall(getrawmetatable, game)
-    if okMT and mt and newcclosure and setreadonly then
-        local oldNamecall = mt.__namecall
-        if oldNamecall then
-            local okRO = pcall(setreadonly, mt, false)
-            if okRO then
-                local okSet, err = pcall(function()
-                    mt.__namecall = newcclosure(function(self, ...)
-                        local method = getnamecallmethod and getnamecallmethod() or nil
-                        if method == "FireServer" or method == "InvokeServer" then
-                            local ok, nm = pcall(function() return self:GetFullName() end)
-                            logRemote(ok and nm or "Unknown", {...})
-                        end
-                        return oldNamecall(self, ...)
-                    end)
-                end)
-                pcall(setreadonly, mt, true)
-                if not okSet then logScript("Remote hook failed: " .. tostring(err)) end
-            end
-        end
     end
 end
 
@@ -365,7 +297,6 @@ do
         return list
     end
     HitboxChanger.parts = hitboxParts
-
     function HitboxChanger.apply(char)
         if not char then return end
         for _, part in ipairs(hitboxParts(char)) do
@@ -561,6 +492,68 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
+--================= FLING =================
+Fling = { Enabled=false, Spin=9e8, BAV=nil, BAVTarget=nil }
+do
+    local function getHRP(plr)
+        local c = plr and plr.Character
+        return c and c:FindFirstChild("HumanoidRootPart")
+    end
+    local function clearBAV()
+        if Fling.BAV and Fling.BAV.Parent then pcall(function() Fling.BAV:Destroy() end) end
+        if Fling.BAVTarget and Fling.BAVTarget.Parent then pcall(function() Fling.BAVTarget:Destroy() end) end
+        Fling.BAV = nil; Fling.BAVTarget = nil
+    end
+    local function spinHRP(hrp)
+        if not hrp then return end
+        if Fling.BAV and Fling.BAV.Parent == hrp then return end
+        clearBAV()
+        local av = Instance.new("BodyAngularVelocity")
+        av.Name = "MerediosFlingAV"
+        av.AngularVelocity = Vector3.new(Fling.Spin, Fling.Spin, Fling.Spin)
+        av.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+        av.Parent = hrp
+        Fling.BAV = av
+    end
+    Fling.apply = function()
+        local hrp = getHRP(LP)
+        if not hrp then return end
+        pcall(function()
+            hrp.CustomPhysicalProperties = PhysicalProperties.new(0.01, 0.3, 0.5, 100, 100)
+        end)
+        spinHRP(hrp)
+    end
+    Fling.stop = function()
+        clearBAV()
+    end
+    Fling.nearest = function()
+        local myHrp = getHRP(LP)
+        if not myHrp then return end
+        local best, bestD = nil, math.huge
+        for _, plr in ipairs(Players:GetPlayers()) do
+            if plr ~= LP then
+                local h = getHRP(plr)
+                if h then
+                    local d = (h.Position - myHrp.Position).Magnitude
+                    if d < bestD then best, bestD = plr, d end
+                end
+            end
+        end
+        if not best then return end
+        local tgt = getHRP(best); if not tgt then return end
+        pcall(function()
+            myHrp.CFrame = tgt.CFrame * CFrame.new(0, 0, -2)
+        end)
+        local av = Instance.new("BodyAngularVelocity")
+        av.Name = "MerediosFlingAVOneShot"
+        av.AngularVelocity = Vector3.new(Fling.Spin, Fling.Spin, Fling.Spin)
+        av.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+        av.Parent = myHrp
+        task.delay(0.6, function() pcall(function() av:Destroy() end) end)
+        logScript("Fling → " .. best.Name)
+    end
+end
+
 --================= AIMBOT =================
 Aimbot = {
     Enabled=false, FOV=140, Color=Color3.fromRGB(255,255,255), ColorName="WHITE",
@@ -607,7 +600,6 @@ do
         Aimbot.ColorName = name; Aimbot.Color = color; updateFOVCircle()
     end
     updateFOVCircle()
-
     Aimbot._fovWrap = fovWrap
     Aimbot._updateFOV = updateFOVCircle
     Aimbot._setColor = setAimbotColor
@@ -762,21 +754,6 @@ do
         end
         ESP.LastCheck[plr] = nil
     end)
-    task.spawn(function()
-        local ok, chat = pcall(function()
-            return game:GetService("ReplicatedStorage"):WaitForChild("DefaultChatSystemChatEvents", 5)
-        end)
-        if ok and chat then
-            local ev = chat:FindFirstChild("OnMessageDoneFiltering")
-            if ev and ev:IsA("RemoteEvent") then
-                ev.OnClientEvent:Connect(function(data)
-                    if data and data.MessageText and data.FromSpeaker then
-                        logServer("CHAT " .. data.FromSpeaker .. ": " .. tostring(data.MessageText))
-                    end
-                end)
-            end
-        end
-    end)
     LP.CharacterAdded:Connect(function(char)
         logServer("local respawned")
         task.wait(0.25)
@@ -784,6 +761,7 @@ do
             local hum = char:FindFirstChildOfClass("Humanoid")
             if hum then hum.WalkSpeed = Speed.Value end
         end
+        if Fling.Enabled then Fling.apply() end
     end)
 end
 
@@ -825,7 +803,7 @@ do
         end
         if #cand == 0 then logScript("ServerHop: no open servers"); return end
         local pick = cand[math.random(1, #cand)]
-        logScript("ServerHop → " .. pick.id .. " · " .. pick.playing .. "/" .. pick.maxPlayers)
+        logScript("ServerHop → " .. pick.id)
         if not hopTo(pick) then logScript("ServerHop: teleport failed") end
     end
     emptyHop = function()
@@ -844,7 +822,7 @@ do
         end
         local pick = empty or lowest
         if not pick then logScript("EmptyHop: none found"); return end
-        logScript("EmptyHop (" .. (empty and "EMPTY" or ("LOWEST "..lowestPop)) .. ") → " .. pick.id)
+        logScript("EmptyHop → " .. pick.id)
         if not hopTo(pick) then logScript("EmptyHop: teleport failed") end
     end
 end
@@ -1125,7 +1103,6 @@ do
     contentBox.Parent = menu
 
     tabButtons = {}; contentPages = {}
-
     _G.Meredios_gearBtn = gearBtn
     _G.Meredios_closeBtn = closeBtn
     _G.Meredios_menuStroke = menuStroke
@@ -1169,7 +1146,6 @@ do
             if tName == name then page.Visible = true; animatePageIn(page) else page.Visible = false end
         end
     end
-    _G.Meredios_switchTab = switchTab
 
     makePage = function(name)
         local page = new("ScrollingFrame", {
@@ -1243,6 +1219,22 @@ do
             reg(d, "TextColor3", "SubText")
         end
         return card, border
+    end
+
+    -- кнопка, прижатая к низу карточки — не выходит за границы
+    makeBottomButton = function(card, text, color, onPick)
+        local btn = new("TextButton", {
+            AnchorPoint = Vector2.new(0.5, 1),
+            Position = UDim2.new(0.5, 0, 1, -8),
+            Size = UDim2.new(1, -24, 0, 24),
+            BackgroundColor3 = color or Accent.Main, BackgroundTransparency = 0.2,
+            Text = text, TextColor3 = Color3.fromRGB(255,255,255),
+            Font = Enum.Font.GothamBold, TextSize = 10,
+            AutoButtonColor = false, BorderSizePixel = 0, ZIndex = 3,
+        })
+        round(btn, 8); btn.Parent = card
+        if onPick then btn.MouseButton1Click:Connect(onPick) end
+        return btn
     end
 
     makeSwitch = function(card, y, onChanged, initial)
@@ -1396,7 +1388,7 @@ do
     end
 end
 
-for i, name in ipairs({"MAIN","LOG","COMBAT","NEW"}) do makeTab(name, i) end
+for i, name in ipairs({"MAIN","COMBAT","NEW"}) do makeTab(name, i) end
 
 --================= MAIN PAGE =================
 do
@@ -1406,7 +1398,7 @@ do
         SortOrder=Enum.SortOrder.LayoutOrder, HorizontalAlignment=Enum.HorizontalAlignment.Center,
     }).Parent = page
 
-    do
+    do -- SPEED
         local card = makeRow(page, 1, "SPEED WALK", "ускоряет ходьбу · 8–500")
         local box = new("TextBox", {
             Position=UDim2.new(1,-126,0,12), Size=UDim2.new(0,58,0,22),
@@ -1433,7 +1425,7 @@ do
         end)
     end
 
-    do
+    do -- ANTI-FLING
         local card = makeRow(page, 2, "ANTI-FLING", "гасит раскрутку от чужих эксплойтов")
         makeSwitch(card, 12, function(v)
             AntiFling.Enabled = v
@@ -1441,202 +1433,39 @@ do
         end)
     end
 
-    do
-        local card = makeRow(page, 3, "REJOIN", "переподключение к текущему серверу", 58)
-        local btn = new("TextButton", {
-            Position=UDim2.new(0,12,0,40), Size=UDim2.new(1,-24,0,24),
-            BackgroundColor3=Accent.Main, BackgroundTransparency=0.2,
-            Text="REJOIN", TextColor3=Color3.fromRGB(255,255,255),
-            Font=Enum.Font.GothamBold, TextSize=10,
-            AutoButtonColor=false, BorderSizePixel=0, ZIndex=3,
-        })
-        round(btn, 8); btn.Parent = card
-        btn.MouseButton1Click:Connect(function()
+    do -- FLING
+        local card = makeRow(page, 3, "FLING", "раскрутка ближнего · касание флинит", 100)
+        makeSwitch(card, 12, function(v)
+            Fling.Enabled = v
+            if v then Fling.apply() else Fling.stop() end
+            logScript("Fling " .. (v and "ON" or "OFF"))
+        end)
+        makeBottomButton(card, "FLING NEAREST", Color3.fromRGB(255, 90, 130), function()
+            Fling.nearest()
+        end)
+    end
+
+    do -- REJOIN
+        local card = makeRow(page, 4, "REJOIN", "переподключение к текущему серверу", 70)
+        makeBottomButton(card, "REJOIN", Accent.Main, function()
             logScript("Rejoin initiated")
             pcall(function() TeleportSvc:Teleport(game.PlaceId, LP) end)
         end)
     end
 
-    do
-        local card = makeRow(page, 4, "SERVER HOP", "переброс на другой сервер игры", 58)
-        local btn = new("TextButton", {
-            Position=UDim2.new(0,12,0,40), Size=UDim2.new(1,-24,0,24),
-            BackgroundColor3=Accent.Main, BackgroundTransparency=0.2,
-            Text="HOP TO RANDOM SERVER", TextColor3=Color3.fromRGB(255,255,255),
-            Font=Enum.Font.GothamBold, TextSize=10,
-            AutoButtonColor=false, BorderSizePixel=0, ZIndex=3,
-        })
-        round(btn, 8); btn.Parent = card
-        btn.MouseButton1Click:Connect(function() task.spawn(serverHop) end)
-    end
-
-    do
-        local card = makeRow(page, 5, "EMPTY HOP", "сервер с 0 игроков", 58)
-        local btn = new("TextButton", {
-            Position=UDim2.new(0,12,0,40), Size=UDim2.new(1,-24,0,24),
-            BackgroundColor3=Color3.fromRGB(80,220,100), BackgroundTransparency=0.2,
-            Text="HOP TO EMPTY SERVER", TextColor3=Color3.fromRGB(255,255,255),
-            Font=Enum.Font.GothamBold, TextSize=10,
-            AutoButtonColor=false, BorderSizePixel=0, ZIndex=3,
-        })
-        round(btn, 8); btn.Parent = card
-        btn.MouseButton1Click:Connect(function() task.spawn(emptyHop) end)
-    end
-end
-
---================= LOG PAGE =================
-do
-    local page = makePage("LOG")
-    page.ScrollingDirection = Enum.ScrollingDirection.X
-    page.AutomaticCanvasSize = Enum.AutomaticSize.None
-    page.CanvasSize = UDim2.new(1,0,1,0)
-    page.ElasticBehavior = Enum.ElasticBehavior.Never
-    page.ScrollingEnabled = false
-
-    local logBorder = new("Frame", {
-        Position=UDim2.new(0,0,0,0), Size=UDim2.new(1,0,1,-34),
-        BackgroundColor3=Color3.new(1,1,1), BorderSizePixel=0, ZIndex=1,
-    })
-    round(logBorder, 14)
-    local logBgGrad = new("UIGradient", { Color=FlowColors, Rotation=0 })
-    logBgGrad.Parent = logBorder; registerGrad(logBgGrad, 25)
-    logBorder.Parent = page
-
-    local logViewport = new("Frame", {
-        Position=UDim2.new(0,2,0,2), Size=UDim2.new(1,-4,1,-4),
-        BackgroundColor3=P.Card, BackgroundTransparency=0.02, BorderSizePixel=0, ZIndex=2,
-    })
-    round(logViewport, 12); logViewport.Parent = logBorder
-    reg(logViewport, "BackgroundColor3", "Card")
-
-    local logScroll = new("ScrollingFrame", {
-        Position=UDim2.new(0,10,0,10), Size=UDim2.new(1,-20,1,-20),
-        BackgroundTransparency=1, BorderSizePixel=0, ScrollBarThickness=3,
-        ScrollBarImageColor3=Accent.Main, ScrollBarImageTransparency=0.4,
-        CanvasSize=UDim2.new(0,0,0,0), AutomaticCanvasSize=Enum.AutomaticSize.Y,
-        ScrollingDirection=Enum.ScrollingDirection.Y, ZIndex=3,
-    })
-    logScroll.Parent = logViewport
-    local logLayout = new("UIListLayout", {
-        FillDirection=Enum.FillDirection.Vertical, Padding=UDim.new(0,4),
-        SortOrder=Enum.SortOrder.LayoutOrder,
-    })
-    logLayout.Parent = logScroll
-
-    local serverTabBtn = new("TextButton", {
-        Position=UDim2.new(0.00,0,1,-28), Size=UDim2.new(0.24,-2,0,28),
-        BackgroundColor3=P.Card, BackgroundTransparency=0.15,
-        Text="SERVER", TextColor3=P.SubText,
-        Font=Enum.Font.GothamBold, TextSize=9,
-        AutoButtonColor=false, BorderSizePixel=0,
-    })
-    round(serverTabBtn, 9); gradientStroke(serverTabBtn, 2, 0.5, 30); serverTabBtn.Parent = page
-
-    local scriptTabBtn = new("TextButton", {
-        Position=UDim2.new(0.24,0,1,-28), Size=UDim2.new(0.24,-2,0,28),
-        BackgroundColor3=Accent.Main, BackgroundTransparency=0.05,
-        Text="SCRIPT", TextColor3=Color3.fromRGB(255,255,255),
-        Font=Enum.Font.GothamBold, TextSize=9,
-        AutoButtonColor=false, BorderSizePixel=0,
-    })
-    round(scriptTabBtn, 9); gradientStroke(scriptTabBtn, 2, 0.3, 30); scriptTabBtn.Parent = page
-
-    local filterBtn = new("TextButton", {
-        Position=UDim2.new(0.48,0,1,-28), Size=UDim2.new(0.18,-2,0,28),
-        BackgroundColor3=P.Card, BackgroundTransparency=0.15,
-        Text="FILTER", TextColor3=P.Text,
-        Font=Enum.Font.GothamBold, TextSize=9,
-        AutoButtonColor=false, BorderSizePixel=0,
-    })
-    round(filterBtn, 9); gradientStroke(filterBtn, 2, 0.5, 30); filterBtn.Parent = page
-    reg(filterBtn, "BackgroundColor3", "Card"); reg(filterBtn, "TextColor3", "Text")
-
-    local copyBtn = new("TextButton", {
-        Position=UDim2.new(0.66,2,1,-28), Size=UDim2.new(0.16,-2,0,28),
-        BackgroundColor3=P.Card, BackgroundTransparency=0.15,
-        Text="COPY", TextColor3=P.Text,
-        Font=Enum.Font.GothamBold, TextSize=9,
-        AutoButtonColor=false, BorderSizePixel=0,
-    })
-    round(copyBtn, 9); gradientStroke(copyBtn, 2, 0.5, 30); copyBtn.Parent = page
-    reg(copyBtn, "BackgroundColor3", "Card"); reg(copyBtn, "TextColor3", "Text")
-
-    local clearBtn = new("TextButton", {
-        Position=UDim2.new(0.82,4,1,-28), Size=UDim2.new(0.18,-4,0,28),
-        BackgroundColor3=P.Card, BackgroundTransparency=0.15,
-        Text="CLR", TextColor3=Color3.fromRGB(255,90,90),
-        Font=Enum.Font.GothamBold, TextSize=9,
-        AutoButtonColor=false, BorderSizePixel=0,
-    })
-    round(clearBtn, 9); gradientStroke(clearBtn, 2, 0.5, 30); clearBtn.Parent = page
-    reg(clearBtn, "BackgroundColor3", "Card")
-
-    table.insert(LogTabButtons, { name="server", btn=serverTabBtn })
-    table.insert(LogTabButtons, { name="script", btn=scriptTabBtn })
-
-    local logLineCache = {}
-    local function renderLog()
-        local buf = Logger.buffer[Logger.activeTab]
-        if #buf == 0 then
-            for _, lbl in ipairs(logLineCache) do pcall(function() lbl:Destroy() end) end
-            logLineCache = {}; return
-        end
-        while #logLineCache < #buf do
-            local lbl = new("TextLabel", {
-                Size=UDim2.new(1,0,0,16), BackgroundTransparency=1, Text="",
-                TextColor3=P.Text, Font=Enum.Font.Code, TextSize=10,
-                TextXAlignment=Enum.TextXAlignment.Left, TextYAlignment=Enum.TextYAlignment.Top,
-                TextWrapped=true, AutomaticSize=Enum.AutomaticSize.Y,
-                LayoutOrder=#logLineCache+1, ZIndex=3,
-            })
-            lbl.Parent = logScroll
-            table.insert(logLineCache, lbl)
-            reg(lbl, "TextColor3", "Text")
-        end
-        for i, lbl in ipairs(logLineCache) do
-            if i <= #buf then lbl.Text = buf[i]; lbl.Visible = true else lbl.Visible = false end
-        end
-        task.defer(function()
-            logScroll.CanvasPosition = Vector2.new(0, math.max(0, logLayout.AbsoluteContentSize.Y - logScroll.AbsoluteSize.Y))
+    do -- SERVER HOP
+        local card = makeRow(page, 5, "SERVER HOP", "переброс на другой сервер игры", 70)
+        makeBottomButton(card, "HOP TO RANDOM SERVER", Accent.Main, function()
+            task.spawn(serverHop)
         end)
     end
 
-    local function switchLogTab(which)
-        Logger.activeTab = which
-        for _, entry in ipairs(LogTabButtons) do
-            local active = (entry.name == which)
-            entry.btn.BackgroundColor3 = active and Accent.Main or P.Card
-            entry.btn.BackgroundTransparency = active and 0.05 or 0.15
-            entry.btn.TextColor3 = active and Color3.fromRGB(255,255,255) or P.SubText
-        end
-        renderLog()
+    do -- EMPTY HOP
+        local card = makeRow(page, 6, "EMPTY HOP", "сервер с 0 игроков", 70)
+        makeBottomButton(card, "HOP TO EMPTY SERVER", Color3.fromRGB(80, 220, 100), function()
+            task.spawn(emptyHop)
+        end)
     end
-    serverTabBtn.MouseButton1Click:Connect(function() switchLogTab("server") end)
-    scriptTabBtn.MouseButton1Click:Connect(function() switchLogTab("script") end)
-
-    copyBtn.MouseButton1Click:Connect(function()
-        local text = Logger.buildText()
-        local ok = Logger.copy(text)
-        if ok then
-            copyBtn.Text = "OK"
-            task.delay(1.0, function() copyBtn.Text = "COPY" end)
-            logScript("Logs copied (" .. #text .. " bytes)")
-        else
-            copyBtn.Text = "ERR"
-            task.delay(1.0, function() copyBtn.Text = "COPY" end)
-            logScript("Copy failed")
-        end
-    end)
-
-    clearBtn.MouseButton1Click:Connect(function()
-        Logger.buffer.server = {}; Logger.buffer.script = {}; renderLog()
-    end)
-
-    table.insert(Logger.listeners, function(channel)
-        if channel == Logger.activeTab then renderLog() end
-    end)
-
-    _G.Meredios_filterBtn = filterBtn
 end
 
 --================= COMBAT PAGE =================
@@ -1647,7 +1476,7 @@ do
         SortOrder=Enum.SortOrder.LayoutOrder, HorizontalAlignment=Enum.HorizontalAlignment.Center,
     }).Parent = page
 
-    do
+    do -- HITBOX
         local card = makeRow(page, 1, "HITBOX CHANGER", "увеличивает хитбокс игроков · VIEW границы", 100)
         local box = new("TextBox", {
             Position=UDim2.new(1,-126,0,46), Size=UDim2.new(0,58,0,22),
@@ -1699,47 +1528,58 @@ do
         viewBtn.MouseButton1Click:Connect(function() setView(not viewState) end)
     end
 
-    do
-        local card = makeRow(page, 2, "ESP", "подсвечивает игроков · зелёный = виден", 180)
-        local setESPEnabled = makeSwitch(card, 12, function(v)
-            ESP.Enabled = v; ESP.refreshAll()
-            logScript("ESP " .. (v and "ON" or "OFF"))
-        end)
-        local visLbl = new("TextLabel", {
-            BackgroundTransparency=1, Position=UDim2.new(0,14,0,74),
-            Size=UDim2.new(1,-100,0,16), Text="VISIBILITY  (green = line of sight)",
+    do -- ESP compact 3-row
+        local card = makeRow(page, 2, "ESP", nil, 150)
+
+        -- Row 1: ENABLED
+        local l1 = new("TextLabel", {
+            BackgroundTransparency=1, Position=UDim2.new(0,20,0,42),
+            Size=UDim2.new(1,-140,0,16), Text="ENABLED",
             TextColor3=P.SubText, Font=Enum.Font.GothamMedium, TextSize=10,
             TextXAlignment=Enum.TextXAlignment.Left, ZIndex=3,
         })
-        visLbl.Parent = card
-        reg(visLbl, "TextColor3", "SubText")
+        l1.Parent = card; reg(l1, "TextColor3", "SubText")
+        local setESPEnabled = makeSwitch(card, 40, function(v)
+            ESP.Enabled = v; ESP.refreshAll()
+            logScript("ESP " .. (v and "ON" or "OFF"))
+        end)
+
+        -- Row 2: VISIBILITY
+        local l2 = new("TextLabel", {
+            BackgroundTransparency=1, Position=UDim2.new(0,20,0,76),
+            Size=UDim2.new(1,-140,0,16), Text="VISIBILITY",
+            TextColor3=P.SubText, Font=Enum.Font.GothamMedium, TextSize=10,
+            TextXAlignment=Enum.TextXAlignment.Left, ZIndex=3,
+        })
+        l2.Parent = card; reg(l2, "TextColor3", "SubText")
         local rebuildESPPalette
         local setESPVis = makeSwitch(card, 74, function(v)
             ESP.VisibilityCheck = v; ESP.reapplyAll()
             if rebuildESPPalette then rebuildESPPalette() end
             logScript("ESP visibility " .. (v and "ON" or "OFF"))
         end)
-        local palLbl = new("TextLabel", {
-            BackgroundTransparency=1, Position=UDim2.new(0,14,0,124),
-            Size=UDim2.new(1,-24,0,14), Text="COLOR",
+
+        -- Row 3: COLOR palette
+        local l3 = new("TextLabel", {
+            BackgroundTransparency=1, Position=UDim2.new(0,20,0,108),
+            Size=UDim2.new(1,-140,0,14), Text="COLOR",
             TextColor3=P.SubText, Font=Enum.Font.GothamMedium, TextSize=10,
             TextXAlignment=Enum.TextXAlignment.Left, ZIndex=3,
         })
-        palLbl.Parent = card
-        reg(palLbl, "TextColor3", "SubText")
-        rebuildESPPalette = makeColorPaletteDynamic(card, 142,
+        l3.Parent = card; reg(l3, "TextColor3", "SubText")
+        rebuildESPPalette = makeColorPaletteDynamic(card, 126,
             function() return ESP.Palette end,
             function() return ESP.ColorName end,
             function(name, color)
                 ESP.Color = color; ESP.ColorName = name
                 ESP.reapplyAll()
                 logScript("ESP color = " .. name)
-            end, 22)
+            end, 20)
         _G.Meredios_setESPEnabled = setESPEnabled
         _G.Meredios_setESPVis = setESPVis
     end
 
-    do
+    do -- AIMBOT
         local card = makeRow(page, 3, "AIMBOT", "жёсткий лок на голову · настройки в ⚙", 68)
         local aimGear = new("TextButton", {
             Position=UDim2.new(1,-126,0,40), Size=UDim2.new(0,28,0,22),
@@ -1788,13 +1628,12 @@ do
         Size=UDim2.new(1,-36,0,160),
         Text=table.concat({
             "• Key gate встроен в стартовую панель",
-            "• CHECK KEY + ✕ очистки поля",
-            "• НАЧАТЬ активируется после валида",
             "• Aimbot sticky-lock · только по живой цели",
             "• FOV ring под GUI · всплывает на drag",
-            "• ESP visibility по умолчанию OFF",
-            "• Remote logger + фильтр ✓/✗",
+            "• ESP compact layout · visibility по умолчанию OFF",
+            "• FLING (tumbler + fling nearest)",
             "• ServerHop · EmptyHop",
+            "• Remote metatable hook снят (anti-cheat safe)",
             "• t.me//meredioshub",
         }, "\n"),
         TextColor3=P.Text, Font=Enum.Font.Gotham, TextSize=10,
@@ -1804,20 +1643,10 @@ do
     body.Parent = card
     reg(body, "TextColor3", "Text")
 
-    local card2 = makeRow(page, 2, "TELEGRAM", "t.me//meredioshub", 60)
-    local btn = new("TextButton", {
-        Position=UDim2.new(0,12,0,44), Size=UDim2.new(1,-24,0,22),
-        BackgroundColor3=Accent.Main, BackgroundTransparency=0.2,
-        Text="СКОПИРОВАТЬ t.me//meredioshub", TextColor3=Color3.fromRGB(255,255,255),
-        Font=Enum.Font.GothamBold, TextSize=10,
-        AutoButtonColor=false, BorderSizePixel=0, ZIndex=3,
-    })
-    round(btn, 8); btn.Parent = card2
-    btn.MouseButton1Click:Connect(function()
+    local card2 = makeRow(page, 2, "TELEGRAM", "t.me//meredioshub", 70)
+    makeBottomButton(card2, "СКОПИРОВАТЬ t.me//meredioshub", Accent.Main, function()
         logScript("TG link copied")
         Logger.copy("t.me//meredioshub")
-        btn.Text = "СКОПИРОВАНО"
-        task.delay(1.2, function() btn.Text = "СКОПИРОВАТЬ t.me//meredioshub" end)
     end)
 end
 
@@ -1980,196 +1809,6 @@ do
             aimPanel.GroupTransparency = 0
             aimPanel.BackgroundTransparency = 0.02
             aimPanelStroke.Transparency = 0.08
-        end)
-    end)
-end
-
---================= FILTER PANEL =================
-do
-    local FLT_W, FLT_H = 340, 320
-    filterPanel = new("CanvasGroup", {
-        AnchorPoint=Vector2.new(0.5,0.5), Position=UDim2.new(0.5,0,0.5,0),
-        Size=UDim2.new(0, FLT_W, 0, FLT_H),
-        BackgroundColor3=P.BgGlass, BackgroundTransparency=0.02,
-        BorderSizePixel=0, GroupTransparency=1, Visible=false, ZIndex=12,
-    })
-    round(filterPanel, 16)
-    local filterPanelStroke = gradientStroke(filterPanel, 2.5, 0.08, 30)
-    filterPanelStroke.Transparency = 1
-    filterPanel.Parent = menu
-    reg(filterPanel, "BackgroundColor3", "BgGlass")
-
-    local fpTitle = new("TextLabel", {
-        BackgroundTransparency=1, Position=UDim2.new(0,18,0,14),
-        Size=UDim2.new(1,-70,0,16), Text="LOG FILTERS · remotes",
-        TextColor3=P.Text, Font=Enum.Font.GothamBold, TextSize=11,
-        TextXAlignment=Enum.TextXAlignment.Left, ZIndex=13,
-    })
-    fpTitle.Parent = filterPanel
-    reg(fpTitle, "TextColor3", "Text")
-
-    local fpClose = new("TextButton", {
-        Position=UDim2.new(1,-38,0,10), Size=UDim2.new(0,26,0,26),
-        BackgroundColor3=P.Card, BackgroundTransparency=0.15,
-        Text="×", TextColor3=P.Text,
-        Font=Enum.Font.GothamBold, TextSize=16,
-        AutoButtonColor=false, BorderSizePixel=0, ZIndex=13,
-    })
-    round(fpClose, 8); fpClose.Parent = filterPanel
-    reg(fpClose, "BackgroundColor3", "Card"); reg(fpClose, "TextColor3", "Text")
-
-    local fpHint = new("TextLabel", {
-        BackgroundTransparency=1, Position=UDim2.new(0,18,0,36),
-        Size=UDim2.new(1,-36,0,24), Text="✓ = log shown    ✗ = hidden",
-        TextColor3=P.SubText, Font=Enum.Font.Gotham, TextSize=9,
-        TextXAlignment=Enum.TextXAlignment.Left, TextYAlignment=Enum.TextYAlignment.Top,
-        TextWrapped=true, ZIndex=13,
-    })
-    fpHint.Parent = filterPanel
-    reg(fpHint, "TextColor3", "SubText")
-
-    local fpShowAll = new("TextButton", {
-        Position=UDim2.new(0,18,0,64), Size=UDim2.new(0.48,-10,0,24),
-        BackgroundColor3=Color3.fromRGB(80,220,100), BackgroundTransparency=0.2,
-        Text="SHOW ALL", TextColor3=Color3.fromRGB(255,255,255),
-        Font=Enum.Font.GothamBold, TextSize=9,
-        AutoButtonColor=false, BorderSizePixel=0, ZIndex=13,
-    })
-    round(fpShowAll, 7); fpShowAll.Parent = filterPanel
-
-    local fpHideAll = new("TextButton", {
-        Position=UDim2.new(0.52,2,0,64), Size=UDim2.new(0.48,-10,0,24),
-        BackgroundColor3=Color3.fromRGB(255,90,90), BackgroundTransparency=0.2,
-        Text="HIDE ALL", TextColor3=Color3.fromRGB(255,255,255),
-        Font=Enum.Font.GothamBold, TextSize=9,
-        AutoButtonColor=false, BorderSizePixel=0, ZIndex=13,
-    })
-    round(fpHideAll, 7); fpHideAll.Parent = filterPanel
-
-    local fpScrollWrap = new("Frame", {
-        Position=UDim2.new(0,18,0,96), Size=UDim2.new(1,-36,1,-108),
-        BackgroundColor3=P.Card, BackgroundTransparency=0.03, BorderSizePixel=0, ZIndex=13,
-    })
-    round(fpScrollWrap, 10); gradientStroke(fpScrollWrap, 2, 0.3, 35)
-    fpScrollWrap.Parent = filterPanel
-    reg(fpScrollWrap, "BackgroundColor3", "Card")
-
-    local fpScroll = new("ScrollingFrame", {
-        Position=UDim2.new(0,6,0,6), Size=UDim2.new(1,-12,1,-12),
-        BackgroundTransparency=1, BorderSizePixel=0, ScrollBarThickness=3,
-        ScrollBarImageColor3=Accent.Main, ScrollBarImageTransparency=0.4,
-        CanvasSize=UDim2.new(0,0,0,0), AutomaticCanvasSize=Enum.AutomaticSize.Y,
-        ScrollingDirection=Enum.ScrollingDirection.Y, ZIndex=14,
-    })
-    fpScroll.Parent = fpScrollWrap
-    new("UIListLayout", {
-        FillDirection=Enum.FillDirection.Vertical, Padding=UDim.new(0,4),
-        SortOrder=Enum.SortOrder.LayoutOrder,
-    }).Parent = fpScroll
-
-    local fpEmptyLbl = new("TextLabel", {
-        Size=UDim2.new(1,0,0,20), BackgroundTransparency=1,
-        Text="(no remotes captured yet)", TextColor3=P.SubText,
-        Font=Enum.Font.Code, TextSize=10,
-        TextXAlignment=Enum.TextXAlignment.Center, LayoutOrder=0, ZIndex=14,
-    })
-    fpEmptyLbl.Parent = fpScroll
-    reg(fpEmptyLbl, "TextColor3", "SubText")
-
-    local fpRows = {}
-    local function rebuildFilters()
-        for _, r in pairs(fpRows) do pcall(function() r.container:Destroy() end) end
-        fpRows = {}
-        local names = {}
-        for n, _ in pairs(Logger.knownRemotes) do table.insert(names, n) end
-        table.sort(names)
-        if #names == 0 then fpEmptyLbl.Visible = true; return end
-        fpEmptyLbl.Visible = false
-        for i, name in ipairs(names) do
-            local container = new("Frame", {
-                Size=UDim2.new(1,0,0,26), BackgroundColor3=P.Bg,
-                BackgroundTransparency=0.35, BorderSizePixel=0,
-                LayoutOrder=i, ZIndex=14,
-            })
-            round(container, 6); container.Parent = fpScroll
-            local nameLbl = new("TextLabel", {
-                BackgroundTransparency=1, Position=UDim2.new(0,8,0,0),
-                Size=UDim2.new(1,-44,1,0), Text=name,
-                TextColor3=P.Text, Font=Enum.Font.Code, TextSize=9,
-                TextXAlignment=Enum.TextXAlignment.Left,
-                TextTruncate=Enum.TextTruncate.AtEnd, ZIndex=15,
-            })
-            nameLbl.Parent = container
-            reg(nameLbl, "TextColor3", "Text")
-            local state = (Logger.filters[name] ~= false)
-            local toggle = new("TextButton", {
-                AnchorPoint=Vector2.new(1,0.5), Position=UDim2.new(1,-6,0.5,0),
-                Size=UDim2.new(0,26,0,20),
-                BackgroundColor3=state and Color3.fromRGB(80,220,100) or Color3.fromRGB(255,90,90),
-                BackgroundTransparency=0.15, Text=state and "✓" or "✗",
-                TextColor3=Color3.fromRGB(255,255,255),
-                Font=Enum.Font.GothamBold, TextSize=12,
-                AutoButtonColor=false, BorderSizePixel=0, ZIndex=15,
-            })
-            round(toggle, 6); toggle.Parent = container
-            toggle.MouseButton1Click:Connect(function()
-                local cur = (Logger.filters[name] ~= false)
-                local nxt = not cur
-                Logger.filters[name] = nxt
-                toggle.BackgroundColor3 = nxt and Color3.fromRGB(80,220,100) or Color3.fromRGB(255,90,90)
-                toggle.Text = nxt and "✓" or "✗"
-                logScript("Filter " .. name .. " = " .. (nxt and "shown" or "hidden"))
-            end)
-            fpRows[name] = { container=container, toggle=toggle }
-        end
-    end
-    fpShowAll.MouseButton1Click:Connect(function()
-        for name, _ in pairs(Logger.knownRemotes) do Logger.filters[name] = true end
-        rebuildFilters(); logScript("All remotes shown")
-    end)
-    fpHideAll.MouseButton1Click:Connect(function()
-        for name, _ in pairs(Logger.knownRemotes) do Logger.filters[name] = false end
-        rebuildFilters(); logScript("All remotes hidden")
-    end)
-    table.insert(Logger.filterListeners, function()
-        if filterPanel.Visible then rebuildFilters() end
-    end)
-
-    local fltOpenToken = 0
-    local filterBtn = _G.Meredios_filterBtn
-    if filterBtn then
-        filterBtn.MouseButton1Click:Connect(function()
-            fltOpenToken = fltOpenToken + 1
-            rebuildFilters()
-            filterPanel.Visible = true
-            filterPanel.GroupTransparency = 1
-            filterPanel.BackgroundTransparency = 1
-            filterPanelStroke.Transparency = 1
-            filterPanel.Size = UDim2.new(0, FLT_W - 30, 0, FLT_H - 20)
-            tween(filterPanel, 0.36, {
-                GroupTransparency=0, BackgroundTransparency=0.02,
-                Size=UDim2.new(0, FLT_W, 0, FLT_H),
-            }, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
-            tween(filterPanelStroke, 0.36, { Transparency=0.08 })
-            _G.MerediosSettingsOpen = true
-        end)
-    end
-    fpClose.MouseButton1Click:Connect(function()
-        fltOpenToken = fltOpenToken + 1
-        local myToken = fltOpenToken
-        tween(filterPanel, 0.28, {
-            GroupTransparency=1, BackgroundTransparency=1,
-            Size=UDim2.new(0, FLT_W - 30, 0, FLT_H - 20),
-        }, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
-        tween(filterPanelStroke, 0.28, { Transparency=1 })
-        _G.MerediosSettingsOpen = false
-        task.delay(0.28, function()
-            if fltOpenToken ~= myToken then return end
-            filterPanel.Visible = false
-            filterPanel.Size = UDim2.new(0, FLT_W, 0, FLT_H)
-            filterPanel.GroupTransparency = 0
-            filterPanel.BackgroundTransparency = 0.02
-            filterPanelStroke.Transparency = 0.08
         end)
     end)
 end
@@ -2439,7 +2078,6 @@ do
         _G.MerediosSettingsOpen = false
         _G.Meredios_settings.Visible = false
         aimPanel.Visible = false
-        filterPanel.Visible = false
     end
 
     local function closeMenu()
@@ -2451,7 +2089,6 @@ do
         tween(_G.Meredios_settings, 0.30, { GroupTransparency=1, BackgroundTransparency=1 })
         tween(_G.Meredios_settingsStroke, 0.30, { Transparency=1 })
         tween(aimPanel, 0.30, { GroupTransparency=1, BackgroundTransparency=1 })
-        tween(filterPanel, 0.30, { GroupTransparency=1, BackgroundTransparency=1 })
         task.delay(0.30, function()
             if closeToken ~= myToken then return end
             menu.Visible = false
@@ -2461,8 +2098,6 @@ do
             _G.Meredios_settingsStroke.Transparency = 0.12
             aimPanel.GroupTransparency = 1
             aimPanel.BackgroundTransparency = 0.02
-            filterPanel.GroupTransparency = 1
-            filterPanel.BackgroundTransparency = 0.02
             mBtn.Visible = true
             mBtn.BackgroundTransparency = 1; mBtn.TextTransparency = 1
             tween(mBtn, 0.32, { BackgroundTransparency=0.08, TextTransparency=0 })
@@ -2545,9 +2180,7 @@ _G.Meredios_closeBtn.MouseButton1Click:Connect(function() _G.Meredios_closeMenu(
 
 --================= START BUTTON =================
 _G.Meredios_startBtn.MouseButton1Click:Connect(function()
-    if not keyValidated then
-        return
-    end
+    if not keyValidated then return end
     if _G.Meredios_markStarted then _G.Meredios_markStarted() end
     tween(_G.Meredios_startup, 0.4, { GroupTransparency=1 })
     tween(_G.Meredios_startupStroke, 0.4, { Transparency=1 })
@@ -2569,6 +2202,5 @@ end
 
 logScript("Kernel loaded · v8.6")
 logScript("t.me//meredioshub")
-logScript("Aimbot sticky-lock · FOV=" .. Aimbot.FOV .. " · " .. Aimbot.ColorName)
 
 return true
