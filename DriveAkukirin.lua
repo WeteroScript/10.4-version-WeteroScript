@@ -1,7 +1,8 @@
 --[[
-    MEREDIOS v9.2 · Game + Visual
+    MEREDIOS v9.3 · Game + Visual
     key-gate + 2 вкладки: GAME / VISUAL
     part actions: подметить / убрать / покрасить (модалка)
+    fix: страница активной вкладки видна сразу при открытии меню
 ]]
 
 --==== SERVICES ====
@@ -225,7 +226,7 @@ do
         Font=Enum.Font.GothamBold,TextSize=22,TextXAlignment=Enum.TextXAlignment.Left,TextTransparency=1})
     startupTitle.Parent = startup; reg(startupTitle,"TextColor3","Text")
     local startupSub = new("TextLabel", {BackgroundTransparency=1,Position=UDim2.new(0,-40,0,42),
-        Size=UDim2.new(1,-32,0,12),Text="// v9.2",TextColor3=P.SubText,
+        Size=UDim2.new(1,-32,0,12),Text="// v9.3",TextColor3=P.SubText,
         Font=Enum.Font.Code,TextSize=9,TextXAlignment=Enum.TextXAlignment.Left,TextTransparency=1})
     startupSub.Parent = startup; reg(startupSub,"TextColor3","SubText")
 
@@ -339,7 +340,7 @@ do
 
     local topBar = new("Frame",{Size=UDim2.new(1,0,0,52),BackgroundTransparency=1,ZIndex=2}); topBar.Parent=menu
     local brand = new("TextLabel",{BackgroundTransparency=1,Position=UDim2.new(0,18,0,10),Size=UDim2.new(0,220,0,18),
-        Text="MEREDIOS v9.2",TextColor3=P.Text,Font=Enum.Font.GothamBold,TextSize=14,
+        Text="MEREDIOS v9.3",TextColor3=P.Text,Font=Enum.Font.GothamBold,TextSize=14,
         TextXAlignment=Enum.TextXAlignment.Left,ZIndex=2}); brand.Parent=topBar; reg(brand,"TextColor3","Text")
     local subBrand = new("TextLabel",{BackgroundTransparency=1,Position=UDim2.new(0,18,0,28),Size=UDim2.new(0,320,0,12),
         Text="game + visual",TextColor3=P.SubText,Font=Enum.Font.Code,TextSize=9,
@@ -527,6 +528,9 @@ do
 end
 
 for i, name in ipairs({"GAME","VISUAL"}) do makeTab(name, i) end
+
+-- ФИКС: активируем стартовую вкладку чтобы страница была Visible сразу
+if contentPages["GAME"] then contentPages["GAME"].Visible = true end
 
 --================================================================
 --  GAME · auto-gas + infinite wheelie
@@ -835,7 +839,6 @@ local function restoreAll()
     Paint.snapshots = {}
 end
 
--- loops: rainbow + hidden
 RunService.Heartbeat:Connect(function()
     if not Scooter.scooter or not Scooter.scooter.Parent then Scooter.scooter = Scooter.findModel() end
     if not Scooter.scooter then return end
@@ -881,7 +884,6 @@ do
         makeSwitch(card, 12, function(v) setNoArms(v) end)
     end
 
-    -- Список частей с модалкой действий
     do
         local CUR_COLORS = {
             {name="CYAN",color=Color3.fromRGB(0,200,255)},
@@ -1213,6 +1215,11 @@ do
     _G.Meredios_markStarted = function() started = true end
 
     local function openMenu()
+        -- ФИКС: показать активную вкладку до показа меню
+        for name, page in pairs(contentPages) do
+            page.Visible = (name == activeTab)
+        end
+
         menu.Visible = true
         menu.GroupTransparency = 1
         menu.BackgroundTransparency = 0.04
@@ -1220,7 +1227,9 @@ do
         tween(menu,0.35,{GroupTransparency=0})
         tween(_G.Meredios_menuStroke,0.35,{Transparency=0.05})
         task.defer(function()
-            if _G.Meredios_animPage and contentPages[activeTab] then _G.Meredios_animPage(contentPages[activeTab]) end
+            if _G.Meredios_animPage and contentPages[activeTab] then
+                _G.Meredios_animPage(contentPages[activeTab])
+            end
         end)
     end
 
@@ -1309,7 +1318,7 @@ _G.Meredios_startBtn.MouseButton1Click:Connect(function()
         mBtn.Visible = true
         mBtn.BackgroundTransparency = 1; mBtn.TextTransparency = 1
         tween(mBtn,0.32,{BackgroundTransparency=0.08,TextTransparency=0})
-        logScript("Meredios v9.2 started")
+        logScript("Meredios v9.3 started")
     end)
 end)
 
@@ -1318,5 +1327,5 @@ for _,e in ipairs(ThemeReg) do
     if inst and inst.Parent then inst[prop]=P[key] end
 end
 
-logScript("Kernel loaded · v9.2")
+logScript("Kernel loaded · v9.3")
 return true
