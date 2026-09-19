@@ -2,7 +2,7 @@
     MEREDIOS v9.3 · Game + Visual
     key-gate + 2 вкладки: GAME / VISUAL
     part actions: подметить / убрать / покрасить (модалка)
-    fix: страница активной вкладки видна сразу при открытии меню
+    fix: markStarted определён + вызывается на НАЧАТЬ + активная вкладка visible сразу
 ]]
 
 --==== SERVICES ====
@@ -414,6 +414,7 @@ do
             if tName==name then page.Visible=true; animPage(page) else page.Visible=false end
         end
     end
+    _G.Meredios_switchTab = switchTab
 
     makePage = function(name)
         local page = new("ScrollingFrame", {Size=UDim2.new(1,0,1,0),BackgroundTransparency=1,BorderSizePixel=0,
@@ -529,7 +530,7 @@ end
 
 for i, name in ipairs({"GAME","VISUAL"}) do makeTab(name, i) end
 
--- ФИКС: активируем стартовую вкладку чтобы страница была Visible сразу
+-- ФИКС: стартовая вкладка видна сразу
 if contentPages["GAME"] then contentPages["GAME"].Visible = true end
 
 --================================================================
@@ -659,7 +660,7 @@ do
 end
 
 --================================================================
---  VISUAL · cam / ui / lights
+--  VISUAL
 --================================================================
 local Vis = {
     freezeCam=false, savedCamType=nil, savedCamCFrame=nil,
@@ -746,11 +747,7 @@ local function setNoArms(on)
     end
 end
 
---================================================================
---  SCOOTER PARTS · anchor + radius + extra
---================================================================
 local Paint = { color=Color3.fromRGB(0,200,255), rainbow=false, snapshots={}, hidden={} }
-
 Paint.PARTS = {
     {label="Задний бампер",          anchor="backbumper",     radius=1.5},
     {label="Передний бампер",        anchor="frontbumper",    radius=1.5},
@@ -855,9 +852,6 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
---================================================================
---  VISUAL PAGE
---================================================================
 do
     local page = makePage("VISUAL")
     new("UIListLayout",{FillDirection=Enum.FillDirection.Vertical,Padding=UDim.new(0,8),
@@ -898,7 +892,7 @@ do
         local currentColor = CUR_COLORS[1].color
         local currentColorName = "CYAN"
 
-        local card = makeRow(page, 6, "СПИСОК ЧАСТЕЙ", "тапни — откроются действия: подметить / убрать / покрасить", 30 + #Paint.PARTS*26 + 40)
+        local card = makeRow(page, 6, "СПИСОК ЧАСТЕЙ", "тапни — откроются действия", 30 + #Paint.PARTS*26 + 40)
         local y = 40
         for i, entry in ipairs(Paint.PARTS) do
             local btn = new("TextButton", {
@@ -1212,14 +1206,14 @@ end
 
 do
     local morphing, started, closeToken = false, false, 0
+
+    -- ФИКС: определена до START
     _G.Meredios_markStarted = function() started = true end
 
     local function openMenu()
-        -- ФИКС: показать активную вкладку до показа меню
         for name, page in pairs(contentPages) do
             page.Visible = (name == activeTab)
         end
-
         menu.Visible = true
         menu.GroupTransparency = 1
         menu.BackgroundTransparency = 0.04
@@ -1310,6 +1304,7 @@ _G.Meredios_closeBtn.MouseButton1Click:Connect(function() _G.Meredios_closeMenu(
 --================================================================
 _G.Meredios_startBtn.MouseButton1Click:Connect(function()
     if not keyValidated then return end
+    -- ФИКС: обязательно вызвать, иначе Morph молча отобьётся
     if _G.Meredios_markStarted then _G.Meredios_markStarted() end
     tween(_G.Meredios_startup,0.4,{GroupTransparency=1})
     tween(_G.Meredios_startupStroke,0.4,{Transparency=1})
