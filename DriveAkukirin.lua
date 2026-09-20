@@ -2,7 +2,7 @@
     MEREDIOS v9.3 · Game + Visual
     key-gate + 2 вкладки: GAME / VISUAL
     part actions: подметить / убрать / покрасить (модалка)
-    fix: markStarted определён + вызывается на НАЧАТЬ + активная вкладка visible сразу
+    fix: mBtnStroke прокинут через _G — морф больше не падает до openMenu
 ]]
 
 --==== SERVICES ====
@@ -530,7 +530,6 @@ end
 
 for i, name in ipairs({"GAME","VISUAL"}) do makeTab(name, i) end
 
--- ФИКС: стартовая вкладка видна сразу
 if contentPages["GAME"] then contentPages["GAME"].Visible = true end
 
 --================================================================
@@ -1169,6 +1168,9 @@ do
     local mBtnGrad = new("UIGradient",{Color=BluePinkSeq,Rotation=30}); mBtnGrad.Parent=mBtnStroke
     registerGrad(mBtnGrad,90)
 
+    -- ФИКС: прокинем ссылку наружу для морфа
+    _G.Meredios_mBtnStroke = mBtnStroke
+
     local drag, dragStart, startAbs, moved = false, nil, nil, false
     local tapCount, lastTapTime, TAP_WINDOW = 0, 0, 1.5
     mBtn.InputBegan:Connect(function(input)
@@ -1207,7 +1209,6 @@ end
 do
     local morphing, started, closeToken = false, false, 0
 
-    -- ФИКС: определена до START
     _G.Meredios_markStarted = function() started = true end
 
     local function openMenu()
@@ -1256,13 +1257,15 @@ do
         mBtn.Text = "MEREDIOS"; mBtn.TextSize = 14
         task.wait(0.55)
         tween(mBtn,0.28,{BackgroundTransparency=1,TextTransparency=1})
-        tween(mBtnStroke,0.28,{Transparency=1})
+        if _G.Meredios_mBtnStroke then
+            tween(_G.Meredios_mBtnStroke,0.28,{Transparency=1})
+        end
         task.wait(0.28)
         mBtn.Visible = false
         mBtn.BackgroundTransparency=0.08; mBtn.TextTransparency=0
         mBtn.Text=oText; mBtn.TextSize=20; mBtn.Size=oSize; mBtn.Position=oPos
         mBtn.TextColor3 = P.Text
-        mBtnStroke.Transparency = 0.05
+        if _G.Meredios_mBtnStroke then _G.Meredios_mBtnStroke.Transparency = 0.05 end
         morphing = false
         openMenu()
     end
@@ -1304,7 +1307,6 @@ _G.Meredios_closeBtn.MouseButton1Click:Connect(function() _G.Meredios_closeMenu(
 --================================================================
 _G.Meredios_startBtn.MouseButton1Click:Connect(function()
     if not keyValidated then return end
-    -- ФИКС: обязательно вызвать, иначе Morph молча отобьётся
     if _G.Meredios_markStarted then _G.Meredios_markStarted() end
     tween(_G.Meredios_startup,0.4,{GroupTransparency=1})
     tween(_G.Meredios_startupStroke,0.4,{Transparency=1})
