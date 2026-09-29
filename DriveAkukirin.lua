@@ -1,6 +1,8 @@
 --[[
-    MEREDIOS v9.5 · Game + Visual
-    fix: infinite wheelie больше не крашит (убран Physics/FallingDown из блокировки)
+    MEREDIOS v9.3 + SKIP
+    key-gate + 2 вкладки: GAME / VISUAL
+    part actions: подметить / убрать / покрасить (модалка)
+    + SKIP кнопка (временно, пока хостинг лежит)
 ]]
 
 --==== SERVICES ====
@@ -224,7 +226,7 @@ do
         Font=Enum.Font.GothamBold,TextSize=22,TextXAlignment=Enum.TextXAlignment.Left,TextTransparency=1})
     startupTitle.Parent = startup; reg(startupTitle,"TextColor3","Text")
     local startupSub = new("TextLabel", {BackgroundTransparency=1,Position=UDim2.new(0,-40,0,42),
-        Size=UDim2.new(1,-32,0,12),Text="// v9.5",TextColor3=P.SubText,
+        Size=UDim2.new(1,-32,0,12),Text="// v9.3",TextColor3=P.SubText,
         Font=Enum.Font.Code,TextSize=9,TextXAlignment=Enum.TextXAlignment.Left,TextTransparency=1})
     startupSub.Parent = startup; reg(startupSub,"TextColor3","SubText")
 
@@ -261,7 +263,7 @@ do
         AutoButtonColor=false,BorderSizePixel=0,TextTransparency=1})
     round(checkBtn,8); checkBtn.Parent = startup
 
-    -- SKIP
+    -- ===== SKIP (временно, хостинг лежит) =====
     local skipBtn = new("TextButton", {
         Position=UDim2.new(0,124,1,-50), Size=UDim2.new(0,64,0,28),
         BackgroundColor3=Color3.fromRGB(120,80,40), BackgroundTransparency=0.15,
@@ -270,6 +272,13 @@ do
         AutoButtonColor=false, BorderSizePixel=0, TextTransparency=0
     })
     round(skipBtn,8); skipBtn.Parent = startup
+
+    local startBtn = new("TextButton", {AnchorPoint=Vector2.new(1,0),Position=UDim2.new(1,-18,1,-50),
+        Size=UDim2.new(0,110,0,28),BackgroundColor3=Accent.Main,BackgroundTransparency=1,
+        Text="НАЧАТЬ",TextColor3=Color3.fromRGB(255,255,255),Font=Enum.Font.GothamBold,
+        TextSize=11,AutoButtonColor=false,BorderSizePixel=0,TextTransparency=1})
+    round(startBtn,8); startBtn.Parent = startup
+
     skipBtn.MouseButton1Click:Connect(function()
         keyValidated = true
         keyStatus.Text = "⚡ SKIP MODE — ключ не проверяется"
@@ -279,12 +288,7 @@ do
         tween(startBtn,0.3,{BackgroundTransparency=0.1,TextTransparency=0})
         logScript("SKIP key check")
     end)
-
-    local startBtn = new("TextButton", {AnchorPoint=Vector2.new(1,0),Position=UDim2.new(1,-18,1,-50),
-        Size=UDim2.new(0,110,0,28),BackgroundColor3=Accent.Main,BackgroundTransparency=1,
-        Text="НАЧАТЬ",TextColor3=Color3.fromRGB(255,255,255),Font=Enum.Font.GothamBold,
-        TextSize=11,AutoButtonColor=false,BorderSizePixel=0,TextTransparency=1})
-    round(startBtn,8); startBtn.Parent = startup
+    -- ===== /SKIP =====
 
     tween(startup,0.45,{GroupTransparency=0})
     tween(startupStroke,0.45,{Transparency=0.08})
@@ -358,7 +362,7 @@ do
 
     local topBar = new("Frame",{Size=UDim2.new(1,0,0,52),BackgroundTransparency=1,ZIndex=2}); topBar.Parent=menu
     local brand = new("TextLabel",{BackgroundTransparency=1,Position=UDim2.new(0,18,0,10),Size=UDim2.new(0,220,0,18),
-        Text="MEREDIOS v9.5",TextColor3=P.Text,Font=Enum.Font.GothamBold,TextSize=14,
+        Text="MEREDIOS v9.3",TextColor3=P.Text,Font=Enum.Font.GothamBold,TextSize=14,
         TextXAlignment=Enum.TextXAlignment.Left,ZIndex=2}); brand.Parent=topBar; reg(brand,"TextColor3","Text")
     local subBrand = new("TextLabel",{BackgroundTransparency=1,Position=UDim2.new(0,18,0,28),Size=UDim2.new(0,320,0,12),
         Text="game + visual",TextColor3=P.SubText,Font=Enum.Font.Code,TextSize=9,
@@ -551,7 +555,7 @@ for i, name in ipairs({"GAME","VISUAL"}) do makeTab(name, i) end
 if contentPages["GAME"] then contentPages["GAME"].Visible = true end
 
 --================================================================
---  GAME · auto-gas + infinite wheelie (без краша)
+--  GAME · auto-gas + infinite wheelie
 --================================================================
 local Scooter = {
     INPUT=nil, MOUNT=nil, scooter=nil,
@@ -604,11 +608,11 @@ do
                 end
             end
         end
-        -- блок только Ragdoll (Physics и FallingDown крашат на мобиле)
         if Scooter.wheelie and typeof(self)=="Instance" and self:IsA("Humanoid") then
             if m=="ChangeState" then
                 local st = ...
-                if st==Enum.HumanoidStateType.Ragdoll then return end
+                if st==Enum.HumanoidStateType.Ragdoll or st==Enum.HumanoidStateType.FallingDown
+                   or st==Enum.HumanoidStateType.Physics then return end
             end
         end
         return old(self, ...)
@@ -616,22 +620,17 @@ do
     setreadonly(mt, true)
 end
 
--- SetStateEnabled только Ragdoll, раз в 0.5 сек (не каждый кадр)
-do
-    local lastState = 0
-    RunService.Heartbeat:Connect(function()
-        if not Scooter.wheelie then return end
-        local now = tick()
-        if now - lastState < 0.5 then return end
-        lastState = now
-        local char = LP.Character; if not char then return end
-        local hum = char:FindFirstChildOfClass("Humanoid"); if not hum then return end
-        pcall(function()
-            hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
-        end)
-        if hum.SeatPart==nil and Scooter.MOUNT then pcall(function() Scooter.MOUNT:FireServer(true) end) end
+RunService.Heartbeat:Connect(function()
+    if not Scooter.wheelie then return end
+    local char = LP.Character; if not char then return end
+    local hum = char:FindFirstChildOfClass("Humanoid"); if not hum then return end
+    pcall(function()
+        hum:SetStateEnabled(Enum.HumanoidStateType.Physics, false)
+        hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
+        hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
     end)
-end
+    if hum.SeatPart==nil and Scooter.MOUNT then pcall(function() Scooter.MOUNT:FireServer(true) end) end
+end)
 
 RunService.Heartbeat:Connect(function(dt)
     if not Scooter.INPUT or not Scooter.ready then return end
@@ -673,7 +672,7 @@ do
         end)
     end
     do
-        local card = makeRow(page, 2, "INFINITE WHEELIE", "фиксирует угол · без краша", 70)
+        local card = makeRow(page, 2, "INFINITE WHEELIE", "фиксирует угол · переживает падение", 70)
         makeSwitch(card, 12, function(v)
             Scooter.wheelie = v
             logScript("Infinite wheelie "..(v and "ON" or "OFF"))
@@ -1337,7 +1336,7 @@ _G.Meredios_startBtn.MouseButton1Click:Connect(function()
         mBtn.Visible = true
         mBtn.BackgroundTransparency = 1; mBtn.TextTransparency = 1
         tween(mBtn,0.32,{BackgroundTransparency=0.08,TextTransparency=0})
-        logScript("Meredios v9.5 started")
+        logScript("Meredios v9.3 started")
     end)
 end)
 
@@ -1346,5 +1345,5 @@ for _,e in ipairs(ThemeReg) do
     if inst and inst.Parent then inst[prop]=P[key] end
 end
 
-logScript("Kernel loaded · v9.5")
+logScript("Kernel loaded · v9.3")
 return true
