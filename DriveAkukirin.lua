@@ -1,8 +1,7 @@
 --[[
-    MEREDIOS v9.3 · Game + Visual
-    key-gate + 2 вкладки: GAME / VISUAL
+    MEREDIOS v9.4 · Game + Visual
+    key-gate + SKIP (временно) + 2 вкладки: GAME / VISUAL
     part actions: подметить / убрать / покрасить (модалка)
-    fix: mBtnStroke прокинут через _G — морф больше не падает до openMenu
 ]]
 
 --==== SERVICES ====
@@ -226,7 +225,7 @@ do
         Font=Enum.Font.GothamBold,TextSize=22,TextXAlignment=Enum.TextXAlignment.Left,TextTransparency=1})
     startupTitle.Parent = startup; reg(startupTitle,"TextColor3","Text")
     local startupSub = new("TextLabel", {BackgroundTransparency=1,Position=UDim2.new(0,-40,0,42),
-        Size=UDim2.new(1,-32,0,12),Text="// v9.3",TextColor3=P.SubText,
+        Size=UDim2.new(1,-32,0,12),Text="// v9.4",TextColor3=P.SubText,
         Font=Enum.Font.Code,TextSize=9,TextXAlignment=Enum.TextXAlignment.Left,TextTransparency=1})
     startupSub.Parent = startup; reg(startupSub,"TextColor3","SubText")
 
@@ -262,6 +261,27 @@ do
         TextColor3=Color3.fromRGB(255,255,255),Font=Enum.Font.GothamBold,TextSize=10,
         AutoButtonColor=false,BorderSizePixel=0,TextTransparency=1})
     round(checkBtn,8); checkBtn.Parent = startup
+
+    -- ===== SKIP (временно, пока домен лежит) =====
+    local skipBtn = new("TextButton", {
+        Position=UDim2.new(0,124,1,-50), Size=UDim2.new(0,64,0,28),
+        BackgroundColor3=Color3.fromRGB(120,80,40), BackgroundTransparency=0.15,
+        Text="SKIP", TextColor3=Color3.fromRGB(255,220,150),
+        Font=Enum.Font.GothamBold, TextSize=10,
+        AutoButtonColor=false, BorderSizePixel=0, TextTransparency=0
+    })
+    round(skipBtn,8); skipBtn.Parent = startup
+    skipBtn.MouseButton1Click:Connect(function()
+        keyValidated = true
+        keyStatus.Text = "⚡ SKIP MODE — ключ не проверяется"
+        keyStatus.TextColor3 = Color3.fromRGB(255,200,100)
+        tween(checkBtn,0.3,{BackgroundTransparency=0.7,TextTransparency=0.5})
+        tween(skipBtn,0.3,{BackgroundTransparency=0.6,TextTransparency=0.4})
+        tween(startBtn,0.3,{BackgroundTransparency=0.1,TextTransparency=0})
+        logScript("SKIP key check")
+    end)
+    -- ===== /SKIP =====
+
     local startBtn = new("TextButton", {AnchorPoint=Vector2.new(1,0),Position=UDim2.new(1,-18,1,-50),
         Size=UDim2.new(0,110,0,28),BackgroundColor3=Accent.Main,BackgroundTransparency=1,
         Text="НАЧАТЬ",TextColor3=Color3.fromRGB(255,255,255),Font=Enum.Font.GothamBold,
@@ -340,7 +360,7 @@ do
 
     local topBar = new("Frame",{Size=UDim2.new(1,0,0,52),BackgroundTransparency=1,ZIndex=2}); topBar.Parent=menu
     local brand = new("TextLabel",{BackgroundTransparency=1,Position=UDim2.new(0,18,0,10),Size=UDim2.new(0,220,0,18),
-        Text="MEREDIOS v9.3",TextColor3=P.Text,Font=Enum.Font.GothamBold,TextSize=14,
+        Text="MEREDIOS v9.4",TextColor3=P.Text,Font=Enum.Font.GothamBold,TextSize=14,
         TextXAlignment=Enum.TextXAlignment.Left,ZIndex=2}); brand.Parent=topBar; reg(brand,"TextColor3","Text")
     local subBrand = new("TextLabel",{BackgroundTransparency=1,Position=UDim2.new(0,18,0,28),Size=UDim2.new(0,320,0,12),
         Text="game + visual",TextColor3=P.SubText,Font=Enum.Font.Code,TextSize=9,
@@ -1168,7 +1188,6 @@ do
     local mBtnGrad = new("UIGradient",{Color=BluePinkSeq,Rotation=30}); mBtnGrad.Parent=mBtnStroke
     registerGrad(mBtnGrad,90)
 
-    -- ФИКС: прокинем ссылку наружу для морфа
     _G.Meredios_mBtnStroke = mBtnStroke
 
     local drag, dragStart, startAbs, moved = false, nil, nil, false
@@ -1315,7 +1334,7 @@ _G.Meredios_startBtn.MouseButton1Click:Connect(function()
         mBtn.Visible = true
         mBtn.BackgroundTransparency = 1; mBtn.TextTransparency = 1
         tween(mBtn,0.32,{BackgroundTransparency=0.08,TextTransparency=0})
-        logScript("Meredios v9.3 started")
+        logScript("Meredios v9.4 started")
     end)
 end)
 
@@ -1324,5 +1343,5 @@ for _,e in ipairs(ThemeReg) do
     if inst and inst.Parent then inst[prop]=P[key] end
 end
 
-logScript("Kernel loaded · v9.3")
+logScript("Kernel loaded · v9.4")
 return true
