@@ -1,8 +1,10 @@
 --[[
-    MEREDIOS v9.3 + SKIP
+    MEREDIOS v9.4
+    + CUSTOM SPEED (walk + scooter)
+    + ANCHOR (walk + scooter)
+    + ANTI-AFK
+    + swap-safe scooter model reset
     key-gate + 2 вкладки: GAME / VISUAL
-    part actions: подметить / убрать / покрасить (модалка)
-    + SKIP кнопка (временно, пока хостинг лежит)
 ]]
 
 --==== SERVICES ====
@@ -14,6 +16,7 @@ local TeleportSvc= game:GetService("TeleportService")
 local HttpSvc    = game:GetService("HttpService")
 local RS         = game:GetService("ReplicatedStorage")
 local LIGHT      = game:GetService("Lighting")
+local VU         = game:GetService("VirtualUser")
 local CAM        = workspace.CurrentCamera
 local LP = Players.LocalPlayer
 if not LP then repeat task.wait(0.1); LP = Players.LocalPlayer until LP end
@@ -226,7 +229,7 @@ do
         Font=Enum.Font.GothamBold,TextSize=22,TextXAlignment=Enum.TextXAlignment.Left,TextTransparency=1})
     startupTitle.Parent = startup; reg(startupTitle,"TextColor3","Text")
     local startupSub = new("TextLabel", {BackgroundTransparency=1,Position=UDim2.new(0,-40,0,42),
-        Size=UDim2.new(1,-32,0,12),Text="// v9.3",TextColor3=P.SubText,
+        Size=UDim2.new(1,-32,0,12),Text="// v9.4",TextColor3=P.SubText,
         Font=Enum.Font.Code,TextSize=9,TextXAlignment=Enum.TextXAlignment.Left,TextTransparency=1})
     startupSub.Parent = startup; reg(startupSub,"TextColor3","SubText")
 
@@ -263,7 +266,6 @@ do
         AutoButtonColor=false,BorderSizePixel=0,TextTransparency=1})
     round(checkBtn,8); checkBtn.Parent = startup
 
-    -- ===== SKIP (временно, хостинг лежит) =====
     local skipBtn = new("TextButton", {
         Position=UDim2.new(0,124,1,-50), Size=UDim2.new(0,64,0,28),
         BackgroundColor3=Color3.fromRGB(120,80,40), BackgroundTransparency=0.15,
@@ -288,7 +290,6 @@ do
         tween(startBtn,0.3,{BackgroundTransparency=0.1,TextTransparency=0})
         logScript("SKIP key check")
     end)
-    -- ===== /SKIP =====
 
     tween(startup,0.45,{GroupTransparency=0})
     tween(startupStroke,0.45,{Transparency=0.08})
@@ -347,7 +348,7 @@ end
 --================================================================
 --  MENU SKELETON
 --================================================================
-local makePage, makeTab, makeRow, makeSwitch, makeColorPaletteDynamic
+local makePage, makeTab, makeRow, makeSwitch, makeColorPaletteDynamic, makeSlider
 local tabBar, contentBox, tabButtons, contentPages
 local activeTab = "GAME"
 
@@ -362,7 +363,7 @@ do
 
     local topBar = new("Frame",{Size=UDim2.new(1,0,0,52),BackgroundTransparency=1,ZIndex=2}); topBar.Parent=menu
     local brand = new("TextLabel",{BackgroundTransparency=1,Position=UDim2.new(0,18,0,10),Size=UDim2.new(0,220,0,18),
-        Text="MEREDIOS v9.3",TextColor3=P.Text,Font=Enum.Font.GothamBold,TextSize=14,
+        Text="MEREDIOS v9.4",TextColor3=P.Text,Font=Enum.Font.GothamBold,TextSize=14,
         TextXAlignment=Enum.TextXAlignment.Left,ZIndex=2}); brand.Parent=topBar; reg(brand,"TextColor3","Text")
     local subBrand = new("TextLabel",{BackgroundTransparency=1,Position=UDim2.new(0,18,0,28),Size=UDim2.new(0,320,0,12),
         Text="game + visual",TextColor3=P.SubText,Font=Enum.Font.Code,TextSize=9,
@@ -548,6 +549,54 @@ do
         rebuild()
         return rebuild
     end
+
+    makeSlider = function(card, y, min, max, initial, onChanged)
+        local valueLbl = new("TextLabel",{BackgroundTransparency=1,Position=UDim2.new(0,20,0,y),
+            Size=UDim2.new(1,-70,0,14),Text="Скорость: "..initial,
+            TextColor3=P.Text,Font=Enum.Font.GothamBold,TextSize=10,
+            TextXAlignment=Enum.TextXAlignment.Left,ZIndex=3})
+        valueLbl.Parent = card; reg(valueLbl,"TextColor3","Text")
+        local track = new("Frame",{Position=UDim2.new(0,20,0,y+22),Size=UDim2.new(1,-40,0,6),
+            BackgroundColor3=P.Track,BorderSizePixel=0,ZIndex=3})
+        round(track,3); track.Parent=card; reg(track,"BackgroundColor3","Track")
+        local fill = new("Frame",{Size=UDim2.new((initial-min)/(max-min),0,1,0),
+            BackgroundColor3=Accent.Main,BorderSizePixel=0,ZIndex=4})
+        round(fill,3); fill.Parent=track
+        local knob = new("Frame",{Size=UDim2.new(0,14,0,14),AnchorPoint=Vector2.new(0.5,0.5),
+            Position=UDim2.new((initial-min)/(max-min),0,0.5,0),
+            BackgroundColor3=P.Knob,BorderSizePixel=0,ZIndex=5})
+        round(knob,7); knob.Parent=track; reg(knob,"BackgroundColor3","Knob")
+        local dragging = false
+        local function setFromX(x)
+            local ax, aw = track.AbsolutePosition.X, track.AbsoluteSize.X
+            if aw <= 0 then return end
+            local rel = math.clamp((x - ax) / aw, 0, 1)
+            local v = math.floor(min + rel * (max - min) + 0.5)
+            fill.Size = UDim2.new(rel,0,1,0)
+            knob.Position = UDim2.new(rel,0,0.5,0)
+            valueLbl.Text = "Скорость: "..v
+            if onChanged then onChanged(v) end
+        end
+        track.InputBegan:Connect(function(input)
+            local t = input.UserInputType
+            if t == Enum.UserInputType.MouseButton1 or t == Enum.UserInputType.Touch then
+                dragging = true; setFromX(input.Position.X)
+            end
+        end)
+        UIS.InputChanged:Connect(function(input)
+            if not dragging then return end
+            local t = input.UserInputType
+            if t == Enum.UserInputType.MouseMovement or t == Enum.UserInputType.Touch then
+                setFromX(input.Position.X)
+            end
+        end)
+        UIS.InputEnded:Connect(function(input)
+            local t = input.UserInputType
+            if t == Enum.UserInputType.MouseButton1 or t == Enum.UserInputType.Touch then
+                dragging = false
+            end
+        end)
+    end
 end
 
 for i, name in ipairs({"GAME","VISUAL"}) do makeTab(name, i) end
@@ -653,6 +702,109 @@ task.spawn(function()
     end
 end)
 
+--================================================================
+--  MOVE · custom speed / anchor / anti-afk
+--================================================================
+local Move = {
+    speedOn = false, speedValue = 50,
+    anchorOn = false,
+    antiAfkOn = true,
+    lv = nil, att = nil, lvPart = nil,
+    anchoredParts = {},
+}
+
+local function Move_clearSpeed()
+    if Move.lv then pcall(function() Move.lv:Destroy() end); Move.lv = nil end
+    if Move.att then pcall(function() Move.att:Destroy() end); Move.att = nil end
+    Move.lvPart = nil
+    local char = LP.Character
+    if char then
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        if hum then pcall(function() hum.WalkSpeed = 16 end) end
+    end
+end
+
+local function Move_clearAnchor()
+    for p, _ in pairs(Move.anchoredParts) do
+        pcall(function() if p and p.Parent then p.Anchored = false end end)
+    end
+    Move.anchoredParts = {}
+    local char = LP.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    if hrp then pcall(function() hrp.Anchored = false end) end
+end
+
+LP.CharacterAdded:Connect(function() Scooter.scooter = nil end)
+
+RunService.Heartbeat:Connect(function()
+    if not Move.speedOn then return end
+    local char = LP.Character; if not char then return end
+    local hum = char:FindFirstChildOfClass("Humanoid"); if not hum then return end
+
+    if hum.SeatPart == nil then
+        pcall(function() hum.WalkSpeed = Move.speedValue end)
+        if Move.lv then Move_clearSpeed() end
+        return
+    end
+
+    local sc = Scooter.scooter
+    if not sc or not sc.Parent or sc:GetAttribute("OwnerUserId") ~= LP.UserId then
+        sc = Scooter.findModel(); Scooter.scooter = sc
+    end
+    if not sc then return end
+    local pr = sc.PrimaryPart or sc:FindFirstChildWhichIsA("BasePart")
+    if not pr then return end
+
+    if Move.lvPart ~= pr then
+        if Move.lv then pcall(function() Move.lv:Destroy() end) Move.lv = nil end
+        if Move.att then pcall(function() Move.att:Destroy() end) Move.att = nil end
+        local att = Instance.new("Attachment", pr)
+        local lv = Instance.new("LinearVelocity", att)
+        lv.Attachment0 = att
+        lv.MaxForce = math.huge
+        lv.RelativeTo = Enum.ActuatorRelativeTo.World
+        lv.VectorVelocity = Vector3.zero
+        Move.lv, Move.att, Move.lvPart = lv, att, pr
+    end
+
+    local dir = hum.MoveDirection
+    if dir.Magnitude < 0.01 then
+        Move.lv.VectorVelocity = pr.AssemblyLinearVelocity
+    else
+        Move.lv.VectorVelocity = dir.Unit * Move.speedValue
+    end
+end)
+
+RunService.Heartbeat:Connect(function()
+    if not Move.anchorOn then return end
+    local char = LP.Character; if not char then return end
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if hum and hum.SeatPart then
+        local sc = Scooter.scooter
+        if sc and sc.Parent then
+            local pr = sc.PrimaryPart or sc:FindFirstChildWhichIsA("BasePart")
+            if pr and not pr.Anchored then
+                pr.Anchored = true
+                Move.anchoredParts[pr] = true
+            end
+        end
+    else
+        local hrp = char:FindFirstChild("HumanoidRootPart")
+        if hrp and not hrp.Anchored then
+            hrp.Anchored = true
+            Move.anchoredParts[hrp] = true
+        end
+    end
+end)
+
+LP.Idled:Connect(function()
+    if not Move.antiAfkOn then return end
+    if VU then pcall(function() VU:CaptureController(); VU:ClickButton1(Vector2.new(0,0)) end) end
+end)
+
+--================================================================
+--  GAME page UI
+--================================================================
 do
     local page = makePage("GAME")
     new("UIListLayout",{FillDirection=Enum.FillDirection.Vertical,Padding=UDim.new(0,8),
@@ -671,12 +823,40 @@ do
             logScript("Auto-gas "..(v and "ON" or "OFF"))
         end)
     end
+
     do
         local card = makeRow(page, 2, "INFINITE WHEELIE", "фиксирует угол · переживает падение", 70)
         makeSwitch(card, 12, function(v)
             Scooter.wheelie = v
             logScript("Infinite wheelie "..(v and "ON" or "OFF"))
         end)
+    end
+
+    do
+        local card = makeRow(page, 3, "CUSTOM SPEED", "своя скорость · пешком и на скутере", 78)
+        makeSlider(card, 40, 16, 300, 50, function(v) Move.speedValue = v end)
+        makeSwitch(card, 12, function(v)
+            Move.speedOn = v
+            if not v then Move_clearSpeed() end
+            logScript("Custom speed "..(v and "ON" or "OFF"))
+        end)
+    end
+
+    do
+        local card = makeRow(page, 4, "ANCHOR", "замораживает скутер / персонажа")
+        makeSwitch(card, 12, function(v)
+            Move.anchorOn = v
+            if not v then Move_clearAnchor() end
+            logScript("Anchor "..(v and "ON" or "OFF"))
+        end)
+    end
+
+    do
+        local card = makeRow(page, 5, "ANTI-AFK", "не выкидывает за неактивность")
+        makeSwitch(card, 12, function(v)
+            Move.antiAfkOn = v
+            logScript("Anti-AFK "..(v and "ON" or "OFF"))
+        end, true)
     end
 end
 
@@ -1336,7 +1516,7 @@ _G.Meredios_startBtn.MouseButton1Click:Connect(function()
         mBtn.Visible = true
         mBtn.BackgroundTransparency = 1; mBtn.TextTransparency = 1
         tween(mBtn,0.32,{BackgroundTransparency=0.08,TextTransparency=0})
-        logScript("Meredios v9.3 started")
+        logScript("Meredios v9.4 started")
     end)
 end)
 
@@ -1345,5 +1525,5 @@ for _,e in ipairs(ThemeReg) do
     if inst and inst.Parent then inst[prop]=P[key] end
 end
 
-logScript("Kernel loaded · v9.3")
+logScript("Kernel loaded · v9.4")
 return true
